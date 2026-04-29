@@ -1,0 +1,103 @@
+\chapter{Methodology}
+
+\section{Development Approach}
+BHUVAN was developed using an \textbf{Agile-Iterative} approach with sprint-based development. Given the solo-developer constraint, a modified Agile framework was adopted:
+
+\begin{itemize}
+    \item \textbf{Sprint duration:} 3--4 days per sprint.
+    \item \textbf{Sprint planning:} Each sprint targeted one major subsystem (terrain, physics, UI, audio).
+    \item \textbf{Continuous integration:} Vite's hot module replacement (HMR) provided instant feedback on code changes.
+    \item \textbf{Iterative refinement:} Each subsystem was built as a minimum viable component, then iteratively improved (e.g., autopilot tuning required three iterations).
+\end{itemize}
+
+\section{Design Thinking Principles}
+The development was guided by user-centric design thinking:
+
+\begin{enumerate}
+    \item \textbf{Empathize:} The primary users (interviewers, students, enthusiasts) want an instant, impressive experience---not a setup process.
+    \item \textbf{Define:} The core problem is making terrain intelligence concepts tangible and interactive.
+    \item \textbf{Ideate:} Multiple rendering approaches were evaluated (NeRF, 3DGS, procedural). Procedural generation was selected because it requires zero training data and runs on any hardware.
+    \item \textbf{Prototype:} Each component was prototyped independently before integration.
+    \item \textbf{Test:} Autopilot was tested across 50+ landing attempts; UI was tested at multiple resolutions.
+\end{enumerate}
+
+\section{Technology Stack Selection}
+
+\begin{table}[h]
+\centering
+\caption{Technology Stack}
+\label{tab:techstack}
+\begin{tabular}{|p{3cm}|p{3.5cm}|p{6cm}|}
+\hline
+\textbf{Layer} & \textbf{Technology} & \textbf{Justification} \\
+\hline
+Build Tool & Vite 6.x & Sub-second HMR, ESM-native, minimal config \\
+\hline
+UI Framework & React 18 & Component-based architecture, hooks for state \\
+\hline
+3D Rendering & Three.js 0.169 & Industry-standard WebGL abstraction \\
+\hline
+3D React Binding & React Three Fiber 8.x & Declarative Three.js in JSX, useFrame hook \\
+\hline
+3D Utilities & Drei 9.x & OrbitControls, Stars, GLTF loaders \\
+\hline
+Post-Processing & @r3f/postprocessing & Bloom, vignette, chromatic aberration \\
+\hline
+Noise Generation & simplex-noise 4.x & Seeded 2D Simplex noise for terrain \\
+\hline
+Audio & Web Audio API & Procedural synthesis, zero file dependencies \\
+\hline
+Styling & Vanilla CSS & Maximum control, CSS custom properties \\
+\hline
+Fonts & Google Fonts & JetBrains Mono, Outfit \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Quality Assurance Strategy}
+\begin{itemize}
+    \item \textbf{Visual Testing:} Browser-based screenshot comparison after each sprint.
+    \item \textbf{Physics Validation:} Autopilot tested against known analytical solutions for constant-gravity descent.
+    \item \textbf{Performance Profiling:} Chrome DevTools Performance tab used to verify frame times $<$ 33ms.
+    \item \textbf{Cross-Browser Testing:} Verified in Chrome 120, Firefox 121, and Edge 120.
+\end{itemize}
+
+\section{Tools and Collaboration}
+\begin{itemize}
+    \item \textbf{Version Control:} Git + GitHub for source code management.
+    \item \textbf{IDE:} Visual Studio Code with ESLint and Prettier.
+    \item \textbf{AI Assistance:} Claude, Gemini for code review and algorithm validation.
+    \item \textbf{Documentation:} Overleaf for LaTeX report compilation.
+\end{itemize}
+
+\section{Project Timeline (Gantt Chart)}
+
+\begin{figure}[h]
+\centering
+\begin{ganttchart}[
+    hgrid, vgrid,
+    x unit=0.7cm, y unit chart=0.6cm,
+    bar/.style={fill=blue!40},
+    milestone/.style={fill=red!60},
+    title height=1,
+    bar height=0.5
+]{1}{15}
+    \gantttitle{Days}{15} \\
+    \gantttitlelist{1,...,15}{1} \\
+    \ganttbar{Research \& Planning}{1}{2} \\
+    \ganttbar{Terrain Engine}{3}{5} \\
+    \ganttbar{Physics Engine}{4}{6} \\
+    \ganttbar{3D Scene (R3F)}{5}{8} \\
+    \ganttbar{Lander Model}{7}{8} \\
+    \ganttbar{HUD \& UI}{8}{10} \\
+    \ganttbar{Audio Engine}{9}{10} \\
+    \ganttbar{Post-Processing}{10}{11} \\
+    \ganttbar{Autopilot Tuning}{11}{12} \\
+    \ganttbar{Camera Fix}{12}{13} \\
+    \ganttbar{Testing \& Polish}{13}{14} \\
+    \ganttbar{Documentation}{14}{15} \\
+    \ganttmilestone{v1.0 Release}{15}
+\end{ganttchart}
+\caption{Project Development Timeline}
+\label{fig:gantt}
+\end{figure}

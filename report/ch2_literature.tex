@@ -1,0 +1,95 @@
+\chapter{Literature Survey}
+
+This chapter reviews existing research and systems related to terrain reconstruction, hazard detection, and real-time 3D rendering, establishing how BHUVAN builds upon and differentiates from prior work.
+
+\section{3D Gaussian Splatting for Real-Time Radiance Field Rendering}
+Kerbl et al.\ \cite{kerbl2023gaussian} introduced 3D Gaussian Splatting (3DGS) as an alternative to Neural Radiance Fields for real-time novel view synthesis. The method represents scenes as collections of anisotropic 3D Gaussians, each parameterized by position, covariance, opacity, and spherical harmonic coefficients for view-dependent color.
+
+\textbf{Key contributions:}
+\begin{itemize}
+    \item Achieves real-time rendering (30+ FPS) at 1080p resolution.
+    \item Training from multi-view images in approximately 30 minutes on an NVIDIA A6000.
+    \item Quality competitive with state-of-the-art NeRF methods (Mip-NeRF 360).
+\end{itemize}
+
+\textbf{Limitations relevant to BHUVAN:}
+\begin{itemize}
+    \item Requires 24--48~GB VRAM for training, making it inaccessible on consumer hardware.
+    \item Requires multi-view image datasets of real scenes; cannot generate novel terrain.
+    \item The resulting splat files are view-synthesis tools, not interactive simulations with physics.
+\end{itemize}
+
+\section{NeRF: Neural Radiance Fields for View Synthesis}
+Mildenhall et al.\ \cite{mildenhall2020nerf} proposed representing a continuous 3D scene as a 5D function (spatial position + viewing direction $\rightarrow$ color + density) encoded in an MLP. Volume rendering is used to synthesize novel views.
+
+\textbf{Key contributions:}
+\begin{itemize}
+    \item Photorealistic novel view synthesis from sparse images.
+    \item Introduced positional encoding to capture high-frequency scene details.
+\end{itemize}
+
+\textbf{Limitations relevant to BHUVAN:}
+\begin{itemize}
+    \item Training takes 12--48 hours per scene on high-end GPUs.
+    \item Rendering is slow ($\sim$30 seconds per frame without acceleration).
+    \item Static scenes only; no physics simulation or interactivity.
+\end{itemize}
+
+\section{Vision Transformers for Dense Prediction (DPT / MiDaS)}
+Ranftl et al.\ \cite{ranftl2021dpt} applied Vision Transformers to monocular depth estimation, achieving state-of-the-art zero-shot depth prediction across diverse datasets.
+
+\textbf{Key contributions:}
+\begin{itemize}
+    \item Zero-shot monocular depth estimation from single RGB images.
+    \item Transformer-based architecture captures global context better than CNNs.
+    \item MiDaS model generalizes across indoor, outdoor, and synthetic scenes.
+\end{itemize}
+
+\textbf{Relevance to BHUVAN:}
+BHUVAN's ``Depth Estimation View'' simulates the output of a monocular depth estimator by rendering terrain elevation as a normalized depth map. While BHUVAN does not run a neural network, the visualization demonstrates how such output would inform landing decisions.
+
+\section{Real-Time Hazard Detection for Mars Landing}
+Huertas et al.\ \cite{huertas2006hazard} developed algorithms for onboard hazard detection during Mars entry, descent, and landing (EDL). Their system processes descent imagery to detect slopes, rocks, and roughness in real time.
+
+\textbf{Key contributions:}
+\begin{itemize}
+    \item Slope computation from stereo-derived DEMs at 1~m resolution.
+    \item Roughness estimation using local height variance.
+    \item Real-time classification of terrain into safe/unsafe zones.
+\end{itemize}
+
+\textbf{Relevance to BHUVAN:}
+BHUVAN implements an analogous pipeline: computing slope magnitude from heightmap gradients ($\nabla h$) and classifying terrain into 5 hazard levels. While Huertas et al.\ use stereo cameras, BHUVAN operates on procedurally generated DEMs.
+
+\section{Comparison Table}
+
+\begin{table}[h]
+\centering
+\caption{Comparison of BHUVAN with Related Work}
+\label{tab:comparison}
+\small
+\begin{tabular}{|p{2.8cm}|p{2cm}|p{2cm}|p{2cm}|p{2cm}|p{2cm}|}
+\hline
+\textbf{Feature} & \textbf{3DGS \cite{kerbl2023gaussian}} & \textbf{NeRF \cite{mildenhall2020nerf}} & \textbf{DPT \cite{ranftl2021dpt}} & \textbf{Huertas \cite{huertas2006hazard}} & \textbf{BHUVAN} \\
+\hline
+Real-time rendering & Yes & No & N/A & Yes & Yes \\
+\hline
+Consumer HW & No (24GB+) & No (16GB+) & Partial & Custom HW & Yes (8GB) \\
+\hline
+Terrain generation & No & No & No & No & Yes \\
+\hline
+Hazard analysis & No & No & No & Yes & Yes \\
+\hline
+Physics simulation & No & No & No & No & Yes \\
+\hline
+Browser-based & Partial & No & No & No & Yes \\
+\hline
+Interactive & View only & View only & Inference & Onboard & Full sim \\
+\hline
+Audio feedback & No & No & No & No & Yes \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Summary}
+Existing systems excel at photorealistic reconstruction (3DGS, NeRF) or specialized hazard detection (Huertas et al.), but none provide an integrated, interactive, browser-based simulation that combines terrain generation, hazard analysis, physics-based descent, and cinematic presentation---all running on consumer hardware. BHUVAN fills this gap as an educational and demonstrative platform.

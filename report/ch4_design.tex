@@ -1,0 +1,139 @@
+\chapter{System Design}
+
+\section{System Architecture}
+BHUVAN follows a \textbf{client-only single-page application (SPA)} architecture. There is no backend server---all computation (terrain generation, physics simulation, hazard analysis, audio synthesis) executes in the user's browser using JavaScript and WebGL.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=1.2cm, auto,
+    block/.style={rectangle, draw, fill=blue!10, text width=3cm, text centered, rounded corners, minimum height=1cm},
+    engine/.style={rectangle, draw, fill=orange!15, text width=2.8cm, text centered, rounded corners, minimum height=1cm},
+    arrow/.style={->, >=stealth, thick}]
+
+    \node[block] (app) {App.jsx\\State Machine};
+    \node[block, below left=1.5cm and 0.5cm of app] (intro) {IntroScreen};
+    \node[block, below=1.5cm of app] (scene) {SceneCanvas\\(R3F Canvas)};
+    \node[block, below right=1.5cm and 0.5cm of app] (hud) {HUD Overlay};
+
+    \node[engine, below left=1.5cm and 0cm of scene] (terrain_e) {terrain.js\\Heightmap Gen};
+    \node[engine, below=1.5cm of scene] (physics_e) {physics.js\\Lander Dynamics};
+    \node[engine, below right=1.5cm and 0cm of scene] (audio_e) {audio.js\\Web Audio};
+
+    \node[block, below left=1.2cm and -0.5cm of terrain_e] (terrain_c) {Terrain.jsx\\Mesh + Colors};
+    \node[block, below=1.2cm of physics_e] (lander_c) {Lander.jsx\\Model + Particles};
+
+    \draw[arrow] (app) -- (intro);
+    \draw[arrow] (app) -- (scene);
+    \draw[arrow] (app) -- (hud);
+    \draw[arrow] (scene) -- (terrain_e);
+    \draw[arrow] (scene) -- (physics_e);
+    \draw[arrow] (app) -- (audio_e);
+    \draw[arrow] (terrain_e) -- (terrain_c);
+    \draw[arrow] (physics_e) -- (lander_c);
+\end{tikzpicture}
+\caption{System Architecture Diagram}
+\label{fig:architecture}
+\end{figure}
+
+\section{Application State Machine}
+The application progresses through four distinct phases:
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[node distance=3cm, auto,
+    state/.style={circle, draw, fill=green!10, minimum size=1.8cm, text centered, font=\small},
+    arrow/.style={->, >=stealth, thick}]
+
+    \node[state] (intro) {INTRO};
+    \node[state, right of=intro] (orbital) {ORBITAL};
+    \node[state, right of=orbital] (descent) {DESCENT};
+    \node[state, above right=0.8cm and 2cm of descent] (landed) {LANDED};
+    \node[state, below right=0.8cm and 2cm of descent] (crashed) {CRASHED};
+
+    \draw[arrow] (intro) -- node[above]{\small Begin} (orbital);
+    \draw[arrow] (orbital) -- node[above]{\small Initiate} (descent);
+    \draw[arrow] (descent) -- node[above,sloped]{\small $|v_y|<3$} (landed);
+    \draw[arrow] (descent) -- node[below,sloped]{\small $|v_y|\geq3$} (crashed);
+\end{tikzpicture}
+\caption{Application State Machine}
+\label{fig:state_machine}
+\end{figure}
+
+\section{Use Case Diagram}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+    \node[draw, minimum width=9cm, minimum height=7cm, label=above:{\textbf{BHUVAN System}}] (sys) at (5,3.5) {};
+    
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc1) at (5,6.2) {View Intro};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc2) at (3,4.8) {Survey Terrain};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc3) at (7,4.8) {Switch View Mode};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc4) at (3,3.2) {Select Landing Zone};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc5) at (7,3.2) {Toggle Autopilot};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc6) at (5,1.8) {Execute Descent};
+    \node[draw, ellipse, text width=2.5cm, text centered] (uc7) at (5,0.5) {View Results};
+
+    \node (user) at (-1.5,3.5) {\includegraphics[width=0.8cm]{example-image}};
+    \node at (-1.5,2.8) {User};
+
+    \draw (user) -- (uc1);
+    \draw (user) -- (uc2);
+    \draw (user) -- (uc3);
+    \draw (user) -- (uc4);
+    \draw (user) -- (uc5);
+    \draw (user) -- (uc6);
+    \draw (user) -- (uc7);
+\end{tikzpicture}
+\caption{Use Case Diagram}
+\label{fig:usecase}
+\end{figure}
+
+\section{Component Design}
+
+\begin{table}[h]
+\centering
+\caption{Component Responsibilities}
+\label{tab:components}
+\begin{tabular}{|p{3.5cm}|p{3cm}|p{6cm}|}
+\hline
+\textbf{Component} & \textbf{Type} & \textbf{Responsibility} \\
+\hline
+App.jsx & React Component & State machine, keyboard input, physics loop orchestration \\
+\hline
+IntroScreen.jsx & React Component & CRT boot animation, mission briefing display \\
+\hline
+HUD.jsx & React Component & Telemetry gauges, bars, warnings, view mode controls \\
+\hline
+SceneCanvas.jsx & R3F Canvas & 3D scene composition, camera rig, post-processing \\
+\hline
+Terrain.jsx & R3F Mesh & Heightmap mesh with switchable vertex colors \\
+\hline
+Lander.jsx & R3F Group & Geometric lander model, thruster flame, exhaust particles \\
+\hline
+terrain.js & Pure Module & fBm noise, crater generation, slope computation, sampling \\
+\hline
+physics.js & Pure Module & Newtonian dynamics, autopilot controller, collision detection \\
+\hline
+audio.js & Pure Module & Web Audio oscillators, noise generators, gain control \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{User Interface Design}
+The UI follows a \textbf{mission-control aesthetic} inspired by SpaceX and NASA flight displays:
+\begin{itemize}
+    \item \textbf{Color palette:} Dark background (\texttt{\#0a0a0f}), green accents (\texttt{\#00ff88}), orange warnings (\texttt{\#ff8800}), red critical (\texttt{\#ff3344}).
+    \item \textbf{Typography:} JetBrains Mono (monospace, telemetry), Outfit (display headings).
+    \item \textbf{Layout:} Full-screen 3D canvas with glassmorphic HUD panels overlaid at edges.
+    \item \textbf{Animations:} CSS keyframe animations for warning pulses, button breathing, and CRT scanlines.
+\end{itemize}
+
+\section{Performance Considerations}
+\begin{itemize}
+    \item Terrain mesh uses a single \texttt{PlaneGeometry} with 65,536 vertices (256$\times$256)---well within WebGL vertex limits.
+    \item Vertex colors are computed once at load time; view mode changes trigger a single geometry rebuild, not per-frame computation.
+    \item Post-processing uses mipmapped bloom to reduce shader passes.
+    \item Particle system uses a fixed pool of 80 particles with manual buffer updates---no object allocation per frame.
+    \item OrbitControls uses damping (\texttt{dampingFactor=0.08}) to reduce input event frequency.
+\end{itemize}

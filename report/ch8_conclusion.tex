@@ -1,0 +1,74 @@
+\chapter{Conclusion and Future Work}
+
+\section{Summary of Achievements}
+BHUVAN demonstrates that a compelling, technically rigorous terrain intelligence simulation can be built entirely in the browser on consumer hardware, without GPU training, external datasets, or server infrastructure. The system successfully integrates:
+
+\begin{itemize}
+    \item Procedural terrain generation producing geologically plausible Martian surfaces.
+    \item Real-time hazard analysis via slope gradient computation.
+    \item A simulated monocular depth estimation view for terrain interpretation.
+    \item A complete physics-based descent simulator with Newtonian dynamics.
+    \item An autopilot controller achieving 96\% soft-landing success rate at $\sim$1.2 m/s average impact speed.
+    \item Cinematic presentation with procedural audio, post-processing, and a mission-control UI.
+\end{itemize}
+
+\section{Objectives vs. Accomplishments}
+
+\begin{table}[h]
+\centering
+\caption{Objectives vs. Accomplishments}
+\label{tab:obj_vs_acc}
+\begin{tabular}{|c|p{6cm}|p{3cm}|p{2.5cm}|}
+\hline
+\textbf{\#} & \textbf{Objective} & \textbf{Status} & \textbf{Evidence} \\
+\hline
+1 & Procedural terrain with craters & Achieved & Fig.~\ref{fig:terrain_surface} \\
+\hline
+2 & Real-time hazard analysis & Achieved & Fig.~\ref{fig:hazard_view} \\
+\hline
+3 & Physics descent simulation & Achieved & Table~\ref{tab:autopilot_results} \\
+\hline
+4 & Autopilot soft landing & Achieved (96\%) & Table~\ref{tab:autopilot_results} \\
+\hline
+5 & Browser-based, zero install & Achieved & Table~\ref{tab:perf} \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Limitations}
+\begin{enumerate}
+    \item \textbf{No real terrain data:} The terrain is procedurally generated, not reconstructed from actual Mars imagery. Integration of real HiRISE DEMs \cite{nasadem} would increase scientific fidelity.
+    \item \textbf{Simplified physics:} The simulation uses a point-mass model without rotational inertia, flexible landing gear dynamics, or terrain interaction forces.
+    \item \textbf{No actual depth estimation:} The depth view simulates MDE output rather than running a neural network. Integrating a lightweight model (e.g., MiDaS small via ONNX.js) is feasible future work.
+    \item \textbf{Single terrain seed:} Currently generates one fixed terrain. Adding seed selection or terrain parameters would increase variety.
+    \item \textbf{No multiplayer or collaborative mode.}
+\end{enumerate}
+
+\section{Future Work}
+
+\subsection{Short-Term Enhancements}
+\begin{itemize}
+    \item \textbf{Mission replay:} Add ability to restart from orbital view after landing.
+    \item \textbf{Terrain variety:} User-selectable seeds, terrain size, and planetary body (Moon, Titan, Europa with different gravity values).
+    \item \textbf{A* Rover Pathfinding:} After landing, simulate rover traversal using A* pathfinding \cite{hart1968astar} with slope as cost function.
+    \item \textbf{Telemetry graphs:} Real-time altitude-vs-time and velocity-vs-time plots during descent.
+\end{itemize}
+
+\subsection{Medium-Term Extensions}
+\begin{itemize}
+    \item \textbf{Real DEM integration:} Load NASA HiRISE elevation data as heightmaps.
+    \item \textbf{Browser-based depth estimation:} Run MiDaS-small via ONNX Runtime Web for actual monocular depth prediction from uploaded images.
+    \item \textbf{Gaussian Splat loading:} Integrate a WebGL splat renderer (e.g., GaussianSplats3D) to load pre-trained \texttt{.splat} files.
+    \item \textbf{PWA offline support:} Service worker for offline functionality.
+\end{itemize}
+
+\subsection{Long-Term Vision}
+\begin{itemize}
+    \item \textbf{Multi-body simulation:} Simulate orbital mechanics around Mars, including transfer orbits and aerobraking.
+    \item \textbf{Collaborative missions:} WebSocket-based multiplayer where one user controls descent while another monitors telemetry.
+    \item \textbf{VR/AR integration:} WebXR support for immersive headset experiences.
+    \item \textbf{ML-based hazard detection:} Train a lightweight CNN on synthetic terrain data for real-time hazard classification.
+\end{itemize}
+
+\section{Closing Remarks}
+BHUVAN proves that meaningful engineering projects in the 3D simulation and terrain intelligence domain do not require million-dollar GPU clusters. With the right architectural decisions---procedural generation over ML training, WebGL over native rendering, algorithmic intelligence over neural networks---a solo developer on consumer hardware can build a system that is both technically impressive and immediately accessible to anyone with a web browser.

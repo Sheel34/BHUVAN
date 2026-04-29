@@ -1,0 +1,109 @@
+\chapter{Analysis / Software Requirements Specification}
+
+\section{Purpose}
+The purpose of BHUVAN is to provide an accessible, browser-based simulation platform that demonstrates the key stages of a planetary rover landing mission: terrain survey, hazard identification, descent execution, and landing assessment. It serves as both an educational tool for understanding terrain intelligence concepts and a portfolio-grade demonstration of real-time 3D engineering.
+
+\section{Intended Users and Product Scope}
+
+\subsection{Intended Users}
+\begin{itemize}
+    \item \textbf{Students:} Aerospace, CS, and AI/DS students studying terrain analysis, physics simulation, or 3D graphics.
+    \item \textbf{Educators:} Faculty demonstrating concepts of hazard detection, Newtonian mechanics, or procedural generation.
+    \item \textbf{Interviewers/Recruiters:} Technical evaluators assessing a candidate's engineering depth.
+    \item \textbf{Space Enthusiasts:} General public interested in interactive Mars exploration experiences.
+\end{itemize}
+
+\subsection{Product Scope}
+BHUVAN covers the simulation of terrain reconnaissance and powered descent. It does \textit{not} cover orbital mechanics, atmospheric entry heating, parachute deployment, or post-landing rover traversal (these are identified as future work).
+
+\section{Functional Requirements}
+
+\begin{table}[h]
+\centering
+\caption{Functional Requirements}
+\label{tab:func_req}
+\begin{tabular}{|c|p{4cm}|p{7.5cm}|}
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Description} \\
+\hline
+FR-01 & Terrain Generation & System shall procedurally generate a 256$\times$256 heightmap using Simplex noise fBm with crater features. \\
+\hline
+FR-02 & Hazard Visualization & System shall compute slope gradients and display a 5-level color-coded hazard overlay. \\
+\hline
+FR-03 & Depth View & System shall render an elevation-based depth map simulating monocular depth estimation output. \\
+\hline
+FR-04 & Landing Zone Selection & User shall click on terrain in orbital view to designate a landing target. \\
+\hline
+FR-05 & Physics Descent & System shall simulate lander descent with Mars gravity, thrust, fuel, and collision detection. \\
+\hline
+FR-06 & Autopilot & System shall provide an automatic landing controller achieving impact speed $<$ 3~m/s. \\
+\hline
+FR-07 & Manual Control & User shall control throttle (W/S) and lateral movement (A/D/Q/E) in manual mode. \\
+\hline
+FR-08 & Telemetry HUD & System shall display altitude, vertical speed, horizontal speed, fuel, and throttle in real time. \\
+\hline
+FR-09 & Audio Feedback & System shall synthesize wind, thruster, warning, and impact sounds procedurally. \\
+\hline
+FR-10 & Post-Processing & System shall apply bloom, vignette, and chromatic aberration effects. \\
+\hline
+FR-11 & Landing Assessment & System shall classify landing as success ($|v_y| < 3$ m/s) or crash, displaying mission statistics. \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Non-Functional Requirements}
+
+\begin{table}[h]
+\centering
+\caption{Non-Functional Requirements}
+\label{tab:nonfunc_req}
+\begin{tabular}{|c|p{3cm}|p{8.5cm}|}
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Description} \\
+\hline
+NFR-01 & Performance & Maintain $\geq$ 30 FPS on hardware with 8~GB VRAM at 1080p resolution. \\
+\hline
+NFR-02 & Load Time & Initial page load and terrain generation shall complete within 3 seconds. \\
+\hline
+NFR-03 & Portability & Application shall run in Chrome, Firefox, and Edge without plugins. \\
+\hline
+NFR-04 & Zero Install & No server-side processing, model downloads, or local installation required. \\
+\hline
+NFR-05 & Responsiveness & UI shall adapt to screen widths from 768px to 2560px. \\
+\hline
+NFR-06 & Accessibility & All interactive elements shall have unique IDs for automated testing. \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{User Interface Requirements}
+\begin{itemize}
+    \item Dark theme with mission-control aesthetic (JetBrains Mono font, neon accents).
+    \item CRT-style intro screen with terminal boot animation.
+    \item Glassmorphic telemetry panels with backdrop blur.
+    \item Color-coded warnings (green/orange/red) for altitude and fuel thresholds.
+    \item Crosshair overlay during descent phase.
+\end{itemize}
+
+\section{Hardware and Software Requirements}
+
+\begin{table}[h]
+\centering
+\caption{Hardware and Software Requirements}
+\label{tab:hw_sw}
+\begin{tabular}{|p{3cm}|p{5cm}|p{5cm}|}
+\hline
+\textbf{Category} & \textbf{Minimum} & \textbf{Recommended} \\
+\hline
+GPU & WebGL 2.0 compatible, 4~GB VRAM & 8~GB VRAM (GTX 1070+) \\
+\hline
+RAM & 8~GB & 16~GB \\
+\hline
+Browser & Chrome 90+ & Chrome 120+ / Edge 120+ \\
+\hline
+OS & Windows 10 / macOS 12 / Linux & Any modern OS \\
+\hline
+Dev Tools & Node.js 18+, npm 9+ & Node.js 20+, VS Code \\
+\hline
+\end{tabular}
+\end{table}

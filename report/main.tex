@@ -1,0 +1,167 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[margin=1in]{geometry}
+\usepackage{times}
+\usepackage{setspace}\onehalfspacing
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows,positioning,fit}
+\usepackage{pgfgantt}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% Formatting
+\titleformat{\chapter}[display]{\normalfont\bfseries\fontsize{14}{17}\selectfont}{\chaptertitlename\ \thechapter}{14pt}{\fontsize{14}{17}\selectfont}
+\titleformat{\section}{\normalfont\bfseries\fontsize{12}{15}\selectfont}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\bfseries\fontsize{12}{15}\selectfont}{\thesubsection}{1em}{}
+
+\pagestyle{fancy}\fancyhf{}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
+  frame=single,breaklines=true,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!70!black},
+  numbers=left,numberstyle=\tiny\color{gray},
+  tabsize=2
+}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\begin{document}
+
+% ============ COVER PAGE ============
+\begin{titlepage}
+\centering
+\vspace*{1cm}
+{\Large\textbf{Parul Institute of Engineering \& Technology}}\\\vspace{0.3cm}
+{\large Department of Artificial Intelligence \& Data Science}\\\vspace{0.3cm}
+{\large Parul University, Vadodara}\\\vspace{1.5cm}
+
+% \includegraphics[width=3cm]{parul_logo.png}\\\vspace{1cm}
+
+{\LARGE\textbf{BHUVAN: Engineered Interactive Terrain Reconstruction and Rover Landing Simulation Platform}}\\\vspace{0.5cm}
+{\large\textit{Integrating Monocular Depth Estimation, Hazard Analysis, Real-Time 3D Terrain Rendering, and Physics-Based Descent Simulation}}\\\vspace{1.5cm}
+
+{\large\textbf{B.Tech Project Report}}\\\vspace{0.3cm}
+{\large Semester VI / VII}\\\vspace{1.5cm}
+
+\begin{tabular}{ll}
+\textbf{Submitted by:} & [Student Name] \\
+\textbf{Enrollment No:} & [Enrollment Number] \\
+\textbf{Guide:} & [Faculty Name] \\
+\end{tabular}\\\vspace{2cm}
+
+{\large Academic Year 2025--2026}
+\end{titlepage}
+
+% ============ CERTIFICATE ============
+\pagenumbering{roman}
+\chapter*{Certificate}
+\addcontentsline{toc}{chapter}{Certificate}
+This is to certify that the project titled \textbf{``BHUVAN: Engineered Interactive Terrain Reconstruction and Rover Landing Simulation Platform''} has been successfully completed by \textbf{[Student Name]}, Enrollment No. \textbf{[Number]}, in partial fulfillment of the requirements for the degree of Bachelor of Technology in Artificial Intelligence \& Data Science at Parul Institute of Engineering \& Technology, Parul University, Vadodara.
+
+\vspace{2cm}
+\noindent
+\begin{tabular}{p{7cm}p{7cm}}
+\textbf{Project Guide} & \textbf{Head of Department} \\[2cm]
+\rule{5cm}{0.4pt} & \rule{5cm}{0.4pt} \\
+[Faculty Name] & [HOD Name] \\
+\end{tabular}
+
+% ============ ACKNOWLEDGEMENTS ============
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+I express my sincere gratitude to my project guide, \textbf{[Faculty Name]}, for their invaluable guidance throughout this project. I thank the Department of AI \& Data Science, PIET, Parul University, for providing the necessary infrastructure. I also acknowledge the open-source communities behind Three.js, React Three Fiber, and the researchers whose work on terrain reconstruction and hazard detection formed the scientific foundation of this system.
+
+% ============ SYNOPSIS ============
+\chapter*{Synopsis}
+\addcontentsline{toc}{chapter}{Synopsis}
+\textbf{BHUVAN} is a browser-based, interactive terrain intelligence platform that simulates the complete lifecycle of a planetary rover landing mission. The system procedurally generates realistic Martian terrain using fractal Brownian motion and crater modeling, performs real-time slope-based hazard analysis, provides a simulated monocular depth estimation view, and executes a full physics-based descent simulation with Newtonian dynamics.
+
+Unlike existing tools such as SuperSplat or Luma AI that require powerful GPU clusters for training, BHUVAN runs entirely in the browser on consumer hardware (8~GB VRAM). The platform features a cinematic mission-control interface with synthesized audio, post-processing effects, and both manual and autopilot landing modes. All terrain, audio, and 3D assets are procedurally generated---zero external files are required.
+
+The project demonstrates competency in real-time 3D rendering (WebGL/Three.js), computational geometry, signal processing for hazard detection, classical physics simulation, and modern web application architecture using React and Vite.
+
+% ============ TOC / LOT / LOF ============
+\tableofcontents
+\listoftables
+\listoffigures
+
+% ============ CHAPTERS START ============
+\cleardoublepage
+\pagenumbering{arabic}
+
+\input{ch1_introduction}
+\input{ch2_literature}
+\input{ch3_srs}
+\input{ch4_design}
+\input{ch5_methodology}
+\input{ch6_implementation}
+\input{ch7_testing}
+\input{ch8_conclusion}
+
+% ============ REFERENCES ============
+\begin{thebibliography}{99}
+\addcontentsline{toc}{chapter}{References}
+
+\bibitem{kerbl2023gaussian}
+B.~Kerbl, G.~Kopanas, T.~Leimk\"uhler, and G.~Drettakis, ``3D Gaussian Splatting for Real-Time Radiance Field Rendering,'' \textit{ACM Trans. Graphics (SIGGRAPH)}, vol.~42, no.~4, 2023.
+
+\bibitem{mildenhall2020nerf}
+B.~Mildenhall, P.~P.~Srinivasan, M.~Tancik, J.~T.~Barron, R.~Ramamoorthi, and R.~Ng, ``NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis,'' in \textit{Proc. ECCV}, 2020, pp.~405--421.
+
+\bibitem{ranftl2021dpt}
+R.~Ranftl, A.~Bochkovskiy, and V.~Koltun, ``Vision Transformers for Dense Prediction,'' in \textit{Proc. ICCV}, 2021, pp.~12179--12188.
+
+\bibitem{golombek2012msl}
+M.~P.~Golombek \textit{et al.}, ``Selection of the Mars Science Laboratory Landing Site,'' \textit{Space Science Reviews}, vol.~170, pp.~641--737, 2012.
+
+\bibitem{johnson2007terrain}
+A.~E.~Johnson, A.~Klumpp, J.~Collier, and A.~Wolf, ``Lidar-Based Hazard Avoidance for Safe Landing on Mars,'' \textit{J. Guidance, Control, and Dynamics}, vol.~25, no.~6, pp.~1091--1099, 2002.
+
+\bibitem{huertas2006hazard}
+A.~Huertas, Y.~Cheng, and L.~Matthies, ``Real-Time Hazard Detection for a Mars Landing System,'' in \textit{IEEE Aerospace Conf.}, 2006, pp.~1--12.
+
+\bibitem{perlin1985noise}
+K.~Perlin, ``An Image Synthesizer,'' \textit{ACM SIGGRAPH Computer Graphics}, vol.~19, no.~3, pp.~287--296, 1985.
+
+\bibitem{hart1968astar}
+P.~E.~Hart, N.~J.~Nilsson, and B.~Raphael, ``A Formal Basis for the Heuristic Determination of Minimum Cost Paths,'' \textit{IEEE Trans. Systems Science and Cybernetics}, vol.~4, no.~2, pp.~100--107, 1968.
+
+\bibitem{musgrave1989terrain}
+F.~K.~Musgrave, C.~E.~Kolb, and R.~S.~Mace, ``The Synthesis and Rendering of Eroded Fractal Terrains,'' \textit{ACM SIGGRAPH Computer Graphics}, vol.~23, no.~3, pp.~41--50, 1989.
+
+\bibitem{threejs}
+Three.js Contributors, ``Three.js -- JavaScript 3D Library,'' \url{https://threejs.org/}, 2024.
+
+\bibitem{r3f}
+P.~Madr and Contributors, ``React Three Fiber,'' \url{https://docs.pmnd.rs/react-three-fiber}, 2024.
+
+\bibitem{supersplat}
+PlayCanvas, ``SuperSplat -- 3D Gaussian Splat Editor,'' \url{https://playcanvas.com/supersplat/editor}, 2024.
+
+\bibitem{nasadem}
+NASA/JPL, ``Mars HiRISE Digital Elevation Models,'' \url{https://www.uahirise.org/dtm/}, 2024.
+
+\bibitem{vite}
+E.~You, ``Vite -- Next Generation Frontend Tooling,'' \url{https://vitejs.dev/}, 2024.
+
+\bibitem{webaudio}
+W3C, ``Web Audio API Specification,'' \url{https://www.w3.org/TR/webaudio/}, 2021.
+
+\end{thebibliography}
+
+\end{document}

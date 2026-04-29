@@ -1,0 +1,189 @@
+\chapter{Implementation}
+
+This chapter details the implementation of each subsystem with algorithms, code snippets, and screenshots.
+
+\section{Procedural Terrain Generation}
+
+\subsection{Fractal Brownian Motion}
+The terrain heightmap is generated using \textbf{fractal Brownian motion (fBm)} \cite{musgrave1989terrain}, which sums multiple octaves of Simplex noise \cite{perlin1985noise} at increasing frequencies and decreasing amplitudes:
+
+\begin{equation}
+h(x,z) = \sum_{i=0}^{N-1} a^i \cdot \text{noise}\!\left(x \cdot f \cdot l^i,\; z \cdot f \cdot l^i\right)
+\label{eq:fbm}
+\end{equation}
+
+where $N=6$ octaves, $a=0.5$ (gain), $l=2.0$ (lacunarity), and $f=0.012$ (base frequency).
+
+\begin{lstlisting}[language=Java, caption={Fractal Brownian Motion Implementation}]
+function fbm(noise, x, z, octaves = 6, lac = 2.0, gain = 0.5) {
+  let amp = 1, freq = 1, val = 0, max = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += amp * noise(x * freq, z * freq);
+    max += amp;
+    amp *= gain;
+    freq *= lac;
+  }
+  return val / max;
+}
+\end{lstlisting}
+
+\subsection{Crater Generation}
+Craters are modeled using a parametric radial profile with four zones:
+
+\begin{equation}
+c(r) = \begin{cases}
+-d(1 - 0.3(r/0.8R)^2) & r < 0.8R \text{ (floor)} \\
+-0.7d(1-s) + 0.4ds & 0.8R \leq r < R \text{ (wall)} \\
+0.4d(1 - s^2) & R \leq r < 1.3R \text{ (rim)} \\
+0.05d \cdot e^{-3s^2} & r \geq 1.3R \text{ (ejecta)}
+\end{cases}
+\end{equation}
+
+where $R$ is crater radius, $d$ is depth, and $s$ is the normalized distance within each zone.
+
+% Screenshot placeholder
+\begin{figure}[h]
+\centering
+\fbox{\parbox{12cm}{\centering\vspace{3cm}\textit{Insert screenshot: Orbital view of procedural Mars terrain showing craters, ridges, and valleys.}\vspace{3cm}}}
+\caption{Procedural Mars Terrain -- Surface View}
+\label{fig:terrain_surface}
+\end{figure}
+
+\section{Hazard Analysis Pipeline}
+
+Terrain slope is computed as the magnitude of the height gradient:
+
+\begin{equation}
+\text{slope}(i,j) = \sqrt{\left(\frac{\partial h}{\partial x}\right)^2 + \left(\frac{\partial h}{\partial z}\right)^2} \approx \sqrt{\left(\frac{h_{i+1,j} - h_{i-1,j}}{2\Delta}\right)^2 + \left(\frac{h_{i,j+1} - h_{i,j-1}}{2\Delta}\right)^2}
+\end{equation}
+
+where $\Delta$ is the cell spacing. The slope value is classified into hazard levels:
+
+\begin{table}[h]
+\centering
+\caption{Hazard Classification Thresholds}
+\label{tab:hazard_levels}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Level} & \textbf{Slope Range} & \textbf{Color} & \textbf{Classification} \\
+\hline
+0 & $< 0.15$ & Green & Safe landing zone \\
+\hline
+1 & $0.15 - 0.25$ & Yellow-Green & Low risk \\
+\hline
+2 & $0.25 - 0.35$ & Yellow & Caution \\
+\hline
+3 & $0.35 - 0.50$ & Orange & High risk \\
+\hline
+4 & $> 0.50$ & Red & No-go zone \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox{12cm}{\centering\vspace{3cm}\textit{Insert screenshot: Hazard analysis overlay showing green safe zones and red danger zones.}\vspace{3cm}}}
+\caption{Hazard Analysis View -- Slope-Based Color Classification}
+\label{fig:hazard_view}
+\end{figure}
+
+\section{Monocular Depth Estimation View}
+The depth view simulates what a monocular depth estimation model (e.g., MiDaS/DPT \cite{ranftl2021dpt}) would output. Elevation is normalized to $[0,1]$ and mapped to a blue-dominant colormap:
+
+\begin{equation}
+(r,g,b) = (0.1 + 0.3v,\; 0.2 + 0.5v,\; 0.1 + 0.9v) \quad \text{where } v = 1 - \frac{h - h_{\min}}{h_{\max} - h_{\min}}
+\end{equation}
+
+\section{Physics-Based Descent Simulation}
+
+\subsection{Equations of Motion}
+The lander is modeled as a point mass under Mars gravity with variable thrust:
+
+\begin{align}
+\dot{v}_y &= -g_{\text{Mars}} + T \cdot \frac{F_{\max}}{m} \label{eq:vy} \\
+\dot{v}_x &= L_x \cdot F_{\text{rcs}} - k_d v_x \label{eq:vx} \\
+\dot{m}_{\text{fuel}} &= -T \cdot \dot{m}_{\text{burn}} \label{eq:fuel}
+\end{align}
+
+where $g_{\text{Mars}} = 3.72$ m/s$^2$, $T \in [0,1]$ is throttle, $F_{\max} = 12.0$ m/s$^2$ max thrust acceleration, $L_x \in [-1,1]$ is lateral input, $F_{\text{rcs}} = 4.0$ m/s$^2$, and $k_d = 0.002$ is atmospheric drag.
+
+\subsection{Landing Criteria}
+\begin{itemize}
+    \item \textbf{Success:} $|v_y| < 3.0$ m/s AND total speed $< 6.0$ m/s at ground contact.
+    \item \textbf{Crash:} Any speed exceeding the above thresholds.
+\end{itemize}
+
+\subsection{Autopilot Controller}
+The autopilot implements a four-phase suicide-burn algorithm:
+
+\begin{enumerate}
+    \item \textbf{Coast} (alt $> 80$m): Minimal thrust, only if descent rate exceeds 10 m/s.
+    \item \textbf{Active Braking} (30--80m): Throttle set to $1.1\times$ the required deceleration.
+    \item \textbf{Hover Descent} (8--30m): Throttle maintains near-hover with slow descent.
+    \item \textbf{Touchdown} ($< 8$m): Precision throttle control targeting $< 1$ m/s at contact.
+\end{enumerate}
+
+\begin{lstlisting}[language=Java, caption={Autopilot Required Deceleration Computation}]
+const reqDecel = (descentRate ** 2) / (2 * altitude) + MARS_GRAVITY;
+const reqThrottle = reqDecel / MAX_THRUST;
+\end{lstlisting}
+
+\section{Procedural Audio Synthesis}
+All audio is generated via the Web Audio API \cite{webaudio} with zero audio files:
+
+\begin{table}[h]
+\centering
+\caption{Audio Components}
+\begin{tabular}{|p{3cm}|p{3cm}|p{6cm}|}
+\hline
+\textbf{Sound} & \textbf{Technique} & \textbf{Parameters} \\
+\hline
+Mars Wind & Brown noise + LP filter & Cutoff 200 Hz, gain 0.15 \\
+\hline
+Thruster & Sawtooth osc + white noise & Base 55 Hz, scales with throttle \\
+\hline
+Warning Beep & Square wave burst & 880 Hz, 150ms duration \\
+\hline
+Impact & Sine wave decay & 60 Hz (crash) / 120 Hz (success) \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{3D Rendering Pipeline}
+
+\subsection{Terrain Mesh}
+The terrain is a single \texttt{THREE.PlaneGeometry(200, 200, 255, 255)} rotated to the XZ plane. Vertex Y-coordinates are displaced by heightmap values. Vertex colors are computed based on the active view mode.
+
+\subsection{Lander Model}
+The lander is assembled from Three.js primitives (no external model file):
+\begin{itemize}
+    \item Body: \texttt{CylinderGeometry} (octagonal cross-section)
+    \item Dome: \texttt{SphereGeometry} (hemisphere)
+    \item Engine bell: \texttt{ConeGeometry} (inverted, open)
+    \item Landing legs: 4$\times$ \texttt{BoxGeometry} struts + \texttt{CylinderGeometry} pads
+    \item Antenna: Thin cylinder + red emissive sphere
+\end{itemize}
+
+\subsection{Post-Processing}
+The rendering pipeline applies three effects via \texttt{EffectComposer}:
+\begin{enumerate}
+    \item \textbf{Bloom:} Intensity 0.6, luminance threshold 0.7 (makes thruster flame and metallic surfaces glow).
+    \item \textbf{Vignette:} Offset 0.15, darkness 0.8 (cinematic edge darkening).
+    \item \textbf{Chromatic Aberration:} Offset (0.0008, 0.0008) (subtle lens distortion).
+\end{enumerate}
+
+\begin{figure}[h]
+\centering
+\fbox{\parbox{12cm}{\centering\vspace{3cm}\textit{Insert screenshot: Descent view showing lander with thruster flame, terrain below, and HUD telemetry overlay.}\vspace{3cm}}}
+\caption{Descent Simulation with Post-Processing Effects}
+\label{fig:descent}
+\end{figure}
+
+\section{User Interface Implementation}
+The HUD is implemented as a CSS overlay on top of the 3D canvas:
+\begin{itemize}
+    \item \textbf{Glassmorphic panels:} \texttt{backdrop-filter: blur(10px)} with semi-transparent backgrounds.
+    \item \textbf{Telemetry gauges:} Large numeric displays (Outfit font, 1.4rem) with color-coded thresholds (green $\rightarrow$ orange $\rightarrow$ red).
+    \item \textbf{Fuel/throttle bars:} CSS progress bars with smooth \texttt{transition: width 0.1s}.
+    \item \textbf{Warnings:} Pulsing CSS animations (\texttt{@keyframes warning-flash}).
+\end{itemize}

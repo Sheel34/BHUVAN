@@ -1,0 +1,82 @@
+\chapter{Introduction}
+
+\section{Brief About the Domain}
+Planetary exploration remains one of humanity's most ambitious scientific endeavors. The success of missions such as NASA's Mars Science Laboratory (Curiosity) and Mars 2020 (Perseverance) depends critically on the ability to identify safe landing zones on extraterrestrial terrain \cite{golombek2012msl}. A single miscalculation during descent---landing on a steep slope, inside a deep crater, or on unstable regolith---can result in the complete loss of a multi-billion-dollar mission.
+
+Terrain reconstruction and hazard detection are therefore central problems in autonomous landing systems. Traditionally, these systems rely on onboard LIDAR sensors and computationally expensive algorithms running on radiation-hardened processors \cite{johnson2007terrain}. However, with advances in web-based 3D rendering (WebGL, Three.js) and procedural generation techniques, it is now feasible to build interactive, browser-based simulations that demonstrate these principles without specialized hardware.
+
+This project, \textbf{BHUVAN}, bridges the gap between theoretical aerospace engineering concepts and accessible, interactive web-based visualization. It provides an end-to-end simulation of the terrain analysis and landing pipeline: from orbital survey and hazard mapping to physics-based powered descent.
+
+\section{Project Motivation and Relevance}
+The motivation for BHUVAN arises from three observations:
+
+\begin{enumerate}
+    \item \textbf{Accessibility gap:} Existing terrain reconstruction tools like SuperSplat \cite{supersplat} and NeRF-based systems \cite{mildenhall2020nerf} require GPU clusters with 40+ GB VRAM for training. Students and independent researchers with consumer hardware (8~GB VRAM) are effectively locked out of experimentation.
+
+    \item \textbf{Educational value:} The physics of planetary descent (Newtonian mechanics, thrust-to-weight ratios, suicide burns) and the mathematics of hazard detection (gradient computation, slope analysis) are taught abstractly in textbooks. An interactive simulation that lets users \textit{experience} these concepts creates deeper understanding than equations on paper.
+
+    \item \textbf{Industry relevance:} Real-time 3D simulation, WebGL rendering, and procedural content generation are increasingly demanded in industries ranging from gaming (Ubisoft, Rockstar) to geospatial intelligence (ISRO, MapmyIndia) to architectural visualization and digital twins.
+\end{enumerate}
+
+\section{Scope}
+The scope of BHUVAN encompasses:
+
+\begin{itemize}
+    \item Procedural generation of Mars-like terrain using fractal Brownian motion (fBm) with Simplex noise and parametric crater modeling.
+    \item Real-time slope-based hazard analysis and color-coded visualization.
+    \item Simulated monocular depth estimation view of the terrain.
+    \item Physics-based descent simulation with Mars gravity ($g = 3.72$ m/s\textsuperscript{2}), variable thrust, fuel consumption, and collision detection.
+    \item Autopilot controller implementing a multi-phase suicide-burn algorithm.
+    \item Manual control mode with keyboard input for throttle and lateral thrusters.
+    \item Procedural audio synthesis (wind, thruster, warnings) via the Web Audio API.
+    \item Cinematic post-processing pipeline (bloom, vignette, chromatic aberration).
+    \item Responsive, mission-control-themed user interface with real-time telemetry.
+\end{itemize}
+
+The system is \textit{not} intended to replace actual flight software or serve as a certified training simulator. It is an educational and demonstrative tool.
+
+\section{Objectives}
+\begin{enumerate}
+    \item To design and implement a procedural terrain generation algorithm that produces geologically plausible planetary surfaces with craters, ridges, and valleys.
+    \item To develop a real-time hazard analysis pipeline that computes terrain slope gradients and classifies regions by landing safety.
+    \item To build a physics engine simulating Newtonian descent dynamics with fuel management and ground collision.
+    \item To create an autopilot controller capable of autonomous soft landing.
+    \item To deliver the entire system as a browser-based application requiring no installation, no external data files, and no GPU training.
+\end{enumerate}
+
+\section{Key Features and Expected Outcomes}
+
+\begin{table}[h]
+\centering
+\caption{Key Features of BHUVAN}
+\label{tab:features}
+\begin{tabular}{|p{4cm}|p{9cm}|}
+\hline
+\textbf{Feature} & \textbf{Description} \\
+\hline
+Procedural Terrain & Fractal Brownian motion with 6 octaves of Simplex noise + parametric craters \\
+\hline
+Hazard Analysis & Real-time slope gradient computation with 5-level color classification \\
+\hline
+Depth Estimation View & Elevation-normalized depth map simulating monocular depth estimator output \\
+\hline
+Physics Descent & Mars gravity, variable thrust, fuel burn, RCS lateral control, drag model \\
+\hline
+Autopilot & 4-phase suicide-burn controller (coast $\rightarrow$ brake $\rightarrow$ hover $\rightarrow$ touchdown) \\
+\hline
+Procedural Audio & Brown-noise wind, sawtooth thruster, square-wave warnings --- zero audio files \\
+\hline
+Post-Processing & Bloom, vignette, chromatic aberration, ACES filmic tone mapping \\
+\hline
+Zero Dependencies & No external models, textures, audio files, or GPU training required \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Expected Outcomes:}
+\begin{itemize}
+    \item A fully functional browser-based simulation accessible via a single URL.
+    \item Autopilot achieving soft landings with impact speed $< 3$ m/s consistently.
+    \item Smooth 60 FPS rendering on hardware with 8~GB VRAM.
+    \item A cinematic, interview-ready demonstration of terrain intelligence concepts.
+\end{itemize}
