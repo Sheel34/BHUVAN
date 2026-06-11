@@ -57,6 +57,34 @@ def generate_sample(
         ridges = 0.12 * np.sin(xx * 18.0) + 0.08 * np.cos(zz * 22.0)
         grid = rim + bowl + ridges
         name = "Lunar South Pole Analogue"
+    elif sample == "moon-shackleton":
+        # Steep-walled polar crater: sharp rim, deep shadowed bowl, rim terraces
+        r = np.sqrt(xx**2 + zz**2)
+        rim = 1.1 * np.exp(-((r - 0.5) ** 2) / 0.008)
+        bowl = -1.3 * np.exp(-(r**2) / 0.14)
+        terraces = 0.08 * np.sin(r * 40.0) * np.exp(-((r - 0.42) ** 2) / 0.02)
+        rough = 0.05 * np.sin(xx * 31.0) * np.cos(zz * 27.0)
+        grid = rim + bowl + terraces + rough
+        name = "Shackleton Crater Rim Analogue"
+    elif sample == "moon-tycho":
+        # Young complex crater: central peak, hummocky floor, slumped walls
+        r = np.sqrt(xx**2 + zz**2)
+        peak = 0.85 * np.exp(-(r**2) / 0.015)
+        floor = -0.55 * np.exp(-(r**2) / 0.30)
+        wall = 0.7 * np.exp(-((r - 0.75) ** 2) / 0.012)
+        hummocks = 0.10 * np.sin(xx * 23.0 + 1.7) * np.sin(zz * 19.0)
+        grid = peak + floor + wall + hummocks
+        name = "Tycho Crater Floor Analogue"
+    elif sample == "moon-mare-tranquillitatis":
+        # Flat basaltic mare: gentle wrinkle ridges, scattered small craters
+        ridges = 0.18 * np.sin(xx * 6.0 + zz * 2.0) * np.exp(-(zz**2) / 0.5)
+        plain = 0.05 * np.sin(xx * 3.0) * np.cos(zz * 4.0)
+        craters = np.zeros_like(xx)
+        for cx, cz, cr in ((0.3, -0.2, 0.05), (-0.45, 0.35, 0.03), (-0.1, -0.5, 0.04)):
+            d2 = (xx - cx) ** 2 + (zz - cz) ** 2
+            craters += -0.3 * np.exp(-d2 / cr) + 0.12 * np.exp(-((np.sqrt(d2) - np.sqrt(cr) * 1.4) ** 2) / 0.004)
+        grid = ridges + plain + craters
+        name = "Mare Tranquillitatis Analogue"
     elif sample == "mars-gale":
         mound = 0.9 * np.exp(-((xx * 0.7) ** 2 + (zz * 0.7) ** 2) / 0.18)
         channel = -0.25 * np.exp(-((xx + 0.25) ** 2) / 0.04)

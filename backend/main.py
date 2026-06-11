@@ -39,6 +39,28 @@ SAMPLE_REGISTRY = {
         "body": "moon",
     },
     "mars-gale": {"label": "Mars Gale Crater Analogue", "source": "bundled-procedural", "body": "mars"},
+    "moon-shackleton": {
+        "label": "Shackleton Crater Rim Analogue",
+        "source": "bundled-procedural",
+        "body": "moon",
+    },
+    "moon-tycho": {
+        "label": "Tycho Crater Floor Analogue",
+        "source": "bundled-procedural",
+        "body": "moon",
+    },
+    "moon-mare-tranquillitatis": {
+        "label": "Mare Tranquillitatis / Apollo 11 Analogue",
+        "source": "bundled-procedural",
+        "body": "moon",
+    },
+    # Real lunar LOLA DEMs (require download first — large files)
+    "lola-south-pole-87s": {
+        "label": "🌑 Lunar South Pole / Shackleton (LOLA 5m Real DEM)",
+        "source": "lola-dem",
+        "body": "moon",
+        "lola_id": "lola-south-pole-87s",
+    },
     # Real HiRISE DTMs (require download first)
     "hirise-jezero-delta": {
         "label": "🛰️ Jezero Crater Delta (HiRISE Real DTM)",
@@ -188,6 +210,13 @@ app = FastAPI(
 
 app.mount("/artifacts", StaticFiles(directory=OUTPUT_DIR), name="artifacts")
 
+# Moon globe textures (CGI Moon Kit cache) served as static assets.
+from data.lroc_downloader import DATA_CACHE_DIR as MOON_CACHE_DIR  # noqa: E402
+
+MOON_TEXTURE_DIR = MOON_CACHE_DIR / "textures"
+MOON_TEXTURE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/moon-assets", StaticFiles(directory=str(MOON_TEXTURE_DIR)), name="moon-assets")
+
 from jobs.routes import router as jobs_router  # noqa: E402 — needs OUTPUT_DIR defined
 
 app.include_router(jobs_router)
@@ -217,11 +246,17 @@ def get_samples():
             "source": info["source"],
             "body": info.get("body", "mars"),
         }
-        # Check if HiRISE DTM is cached
+        # Check if real-data samples are cached locally
         if info["source"] == "hirise-dtm":
             try:
                 from data.hirise_downloader import get_cache_path
                 entry["cached"] = get_cache_path(info["hirise_id"]).exists()
+            except Exception:
+                entry["cached"] = False
+        elif info["source"] == "lola-dem":
+            try:
+                from data.lroc_downloader import get_dem_cache_path
+                entry["cached"] = get_dem_cache_path(info["lola_id"]).exists()
             except Exception:
                 entry["cached"] = False
         else:
@@ -232,6 +267,89 @@ def get_samples():
         "api_version": API_VERSION,
         "samples": samples,
     }
+
+
+@app.get("/api/v1/moon/textures")
+def get_moon_textures():
+    """Globe texture status. Frontend uses the returned URLs for the hero moon."""
+    from data.lroc_downloader import (
+        DEFAULT_TEXTURE_SET,
+        GLOBE_TEXTURES,
+        get_texture_path,
+        list_globe_textures,
+    )
+
+    textures = list_globe_textures()
+    ready = all(get_texture_path(t).exists() for t in DEFAULT_TEXTURE_SET)
+
+    urls = {}
+    for tex_id in DEFAULT_TEXTURE_SET:
+        info = GLOBE_TEXTURES[tex_id]
+        if get_texture_path(tex_id).exists():
+            urls[info["kind"]] = f"/moon-assets/{info['filename']}"
+
+    return {
+        "api_version": API_VERSION,
+        "ready": ready,
+        "urls": urls,
+        "catalog": textures,
+    }
+
+
+@app.post("/api/v1/moon/textures/download")
+def download_moon_textures():
+    """Fetch the default globe texture set (~14 MB total) from NASA SVS."""
+    from data.lroc_downloader import ensure_default_textures
+
+    try:
+        paths = ensure_default_textures()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=ErrorDetail(code="DOWNLOAD_FAILED", message=str(exc)).model_dump(),
+        )
+    return {
+        "api_version": API_VERSION,
+        "status": "downloaded",
+        "textures": {k: str(v) for k, v in paths.items()},
+    }
+
+
+@app.get("/api/v1/lola-catalog")
+def get_lola_catalog():
+    """List curated lunar LOLA DEMs with download status."""
+    from data.lroc_downloader import list_curated_dems
+
+    return {
+        "api_version": API_VERSION,
+        "dems": list_curated_dems(),
+    }
+
+
+@app.post("/api/v1/lola-download/{dem_id}")
+def download_lola_dem(dem_id: str):
+    """Download a lunar LOLA DEM (warning: polar mosaics are 1-2 GB)."""
+    from data.lroc_downloader import download_dem
+
+    try:
+        path = download_dem(dem_id)
+        return {
+            "api_version": API_VERSION,
+            "status": "downloaded",
+            "dem_id": dem_id,
+            "path": str(path),
+            "size_mb": round(path.stat().st_size / 1e6, 1),
+        }
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorDetail(code="UNKNOWN_DEM", message=str(exc)).model_dump(),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=ErrorDetail(code="DOWNLOAD_FAILED", message=str(exc)).model_dump(),
+        )
 
 
 @app.get("/api/v1/hirise-catalog")
@@ -318,6 +436,31 @@ def analyze_sample(request: AnalyzeRequest):
                 detail=ErrorDetail(
                     code="HIRISE_MODULE_MISSING",
                     message="HiRISE downloader not available. Install rasterio.",
+                ).model_dump(),
+            )
+    elif sample_info["source"] == "lola-dem":
+        # Load real lunar LOLA DEM data
+        try:
+            from data.lroc_downloader import load_dem_as_numpy
+            lola_id = sample_info["lola_id"]
+            elevation, metadata = load_dem_as_numpy(lola_id, target_size=512)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorDetail(
+                    code="DEM_NOT_CACHED",
+                    message=(
+                        f"Lunar DEM '{sample_info['lola_id']}' not downloaded. "
+                        f"Call POST /api/v1/lola-download/{sample_info['lola_id']} first."
+                    ),
+                ).model_dump(),
+            )
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail=ErrorDetail(
+                    code="LOLA_MODULE_MISSING",
+                    message="Lunar downloader not available. Install rasterio.",
                 ).model_dump(),
             )
     else:

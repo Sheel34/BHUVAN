@@ -33,6 +33,7 @@ cache/
 tmp/
 report/
 report.zip
+data_cache/
 
 # Graphify tool output
 graphify-out/

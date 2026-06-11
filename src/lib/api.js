@@ -41,11 +41,13 @@ class ApiError extends Error {
 
 async function requestJson(url, options = {}) {
 
+  const { timeoutMs = 15000, ...fetchOptions } = options;
+
   let response;
 
   try {
 
-    response = await fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
+    response = await fetch(url, { ...fetchOptions, signal: AbortSignal.timeout(timeoutMs) });
 
   } catch (err) {
 
@@ -405,6 +407,42 @@ function generateMockAnalysis(id) {
     ],
 
   };
+
+}
+
+
+
+export async function fetchMoonTextures() {
+
+  try {
+
+    let status = await requestJson(`${API_V1}/moon/textures`);
+
+    if (!status.ready) {
+
+      await requestJson(`${API_V1}/moon/textures/download`, { method: 'POST', timeoutMs: 120000 });
+
+      status = await requestJson(`${API_V1}/moon/textures`);
+
+    }
+
+    if (!status.ready || !status.urls?.color || !status.urls?.displacement) return null;
+
+    return {
+
+      color: `${API_BASE}${status.urls.color}`,
+
+      displacement: `${API_BASE}${status.urls.displacement}`,
+
+    };
+
+  } catch (err) {
+
+    console.warn('Moon textures unavailable, globe will use procedural fallback.', err);
+
+    return null;
+
+  }
 
 }
 

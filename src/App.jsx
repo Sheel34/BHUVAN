@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import IntroScreen from './components/IntroScreen';
 import HUD from './components/HUD';
 import DebugOverlay from './components/DebugOverlay';
+import GlobeOverlay from './components/GlobeOverlay';
 import SceneCanvas from './scene/SceneCanvas';
+import MoonGlobe from './scene/MoonGlobe';
 import { inspectTerrainPoint, sampleHeight, sampleRaster, hazardLevel } from './engine/terrain';
 import { createLanderState, updateLander, computeAutopilot } from './engine/physics';
-import { analyzeSample, analyzeUpload, fetchSampleCatalog } from './lib/api';
+import { analyzeSample, analyzeUpload, fetchSampleCatalog, fetchMoonTextures } from './lib/api';
 import { generateMissionReport, downloadReport } from './engine/missionReport';
 import {
   resumeAudio,
@@ -46,7 +47,8 @@ function createMissionReport(analysis, selectedZone, finalState) {
 }
 
 export default function App() {
-  const [phase, setPhase] = useState('intro');
+  const [phase, setPhase] = useState('globe');
+  const [moonTextures, setMoonTextures] = useState(null);
   const [viewMode, setViewMode] = useState(DEFAULT_VIEW);
   const [analysis, setAnalysis] = useState(null);
   const [analysisStatus, setAnalysisStatus] = useState('idle');
@@ -129,6 +131,16 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    fetchMoonTextures().then((urls) => {
+      if (active) setMoonTextures(urls);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const setSelectedZone = useCallback((zone) => {
     setSelectedZoneId(zone?.id || null);
     if (zone && analysis) {
@@ -191,6 +203,12 @@ export default function App() {
     startWind();
     setPhase('analyze');
   }, []);
+
+  const handleGlobeSiteSelected = useCallback((site) => {
+    resumeAudio();
+    startWind();
+    handleAnalyzeSample(site.sampleId);
+  }, [handleAnalyzeSample]);
 
   const handleInspectPoint = useCallback((wx, wz) => {
     if (!analysis) return;
@@ -324,8 +342,19 @@ export default function App() {
     downloadReport(report);
   }, [analysis, selectedZone, missionReport]);
 
-  if (phase === 'intro') {
-    return <IntroScreen onStart={handleStart} />;
+  if (phase === 'globe') {
+    return (
+      <div className="simulation-root">
+        <MoonGlobe textureUrls={moonTextures} onSiteSelected={handleGlobeSiteSelected} />
+        <GlobeOverlay
+          analysisStatus={analysisStatus}
+          analysisError={analysisError}
+          textureSource={moonTextures ? 'real' : 'procedural'}
+          onSelectSite={handleGlobeSiteSelected}
+          onOpenWorkbench={handleStart}
+        />
+      </div>
+    );
   }
 
   return (
