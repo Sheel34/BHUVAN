@@ -59,11 +59,12 @@ function LanderBody() {
 }
 
 /* ── Thruster Flame ── */
-function ThrusterFlame({ throttle }) {
+function ThrusterFlame({ landerRef }) {
   const flameRef = useRef();
   const lightRef = useRef();
 
   useFrame((_, dt) => {
+    const throttle = landerRef.current?.throttle || 0;
     if (flameRef.current) {
       const scale = throttle * (0.8 + Math.random() * 0.4);
       flameRef.current.scale.set(scale, scale * 2, scale);
@@ -86,7 +87,7 @@ function ThrusterFlame({ throttle }) {
 }
 
 /* ── Exhaust Particles ── */
-function ExhaustParticles({ throttle }) {
+function ExhaustParticles({ landerRef }) {
   const pointsRef = useRef();
   const particleCount = 80;
 
@@ -101,6 +102,7 @@ function ExhaustParticles({ throttle }) {
   }, []);
 
   useFrame((_, dt) => {
+    const throttle = landerRef.current?.throttle || 0;
     if (!pointsRef.current || throttle < 0.01) {
       if (pointsRef.current) pointsRef.current.visible = false;
       return;
@@ -149,23 +151,30 @@ function ExhaustParticles({ throttle }) {
 }
 
 /* ── Complete Lander ── */
-export default function Lander({ landerState }) {
+export default function Lander({ landerRef }) {
   const groupRef = useRef();
+  const quatObj = useMemo(() => new THREE.Quaternion(), []);
 
   useFrame(() => {
-    if (groupRef.current && landerState) {
-      groupRef.current.position.set(landerState.x, landerState.y, landerState.z);
-      groupRef.current.rotation.set(landerState.pitch, landerState.yaw, landerState.roll);
+    const state = landerRef.current;
+    if (groupRef.current && state) {
+      groupRef.current.position.set(state.x, state.y, state.z);
+      // Apply quaternion attitude from 6DOF physics
+      if (state.quat) {
+        quatObj.set(state.quat[1], state.quat[2], state.quat[3], state.quat[0]);
+        groupRef.current.quaternion.copy(quatObj);
+      } else {
+        // Fallback for legacy Euler-based state
+        groupRef.current.rotation.set(state.pitch || 0, state.yaw || 0, state.roll || 0);
+      }
     }
   });
-
-  const throttle = landerState?.throttle || 0;
 
   return (
     <group ref={groupRef}>
       <LanderBody />
-      <ThrusterFlame throttle={throttle} />
-      <ExhaustParticles throttle={throttle} />
+      <ThrusterFlame landerRef={landerRef} />
+      <ExhaustParticles landerRef={landerRef} />
     </group>
   );
 }

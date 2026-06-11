@@ -1,35 +1,68 @@
 from __future__ import annotations
 
-from typing import Annotated
+import logging
+import os
+import tempfile
+import uuid
+from typing import Annotated, Callable, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .pipeline.ingest import generate_sample, ingest_image_bytes
-from .pipeline.landing_zones import rank_landing_zones
-from .pipeline.schemas import (
+from pipeline.artifacts import write_analysis_artifacts
+from pipeline.ingest import generate_sample, ingest_geotiff, ingest_image_bytes
+from pipeline.landing_zones import rank_landing_zones
+from pipeline.schemas import (
     AnalysisLayers,
     AnalysisPayload,
     LandingZone,
     TerrainGrid,
     TerrainMeta,
 )
-from .pipeline.terrain_analysis import analyze_terrain
+from pipeline.terrain_analysis import analyze_terrain
 
-API_VERSION = "1.0"
+logger = logging.getLogger(__name__)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_DIR = os.environ.get("ARES_OUTPUT_DIR", os.path.join(BASE_DIR, "outputs"))
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+API_VERSION = "1.1"
 SAMPLE_REGISTRY = {
-    "mars-jezero": {"label": "Mars Jezero Analogue", "source": "bundled-procedural"},
+    # Procedural analogues (always available, no download required)
+    "mars-jezero": {"label": "Mars Jezero Analogue", "source": "bundled-procedural", "body": "mars"},
     "moon-south-pole": {
         "label": "Lunar South Pole Analogue",
         "source": "bundled-procedural",
+        "body": "moon",
     },
-    "mars-gale": {"label": "Mars Gale Crater Analogue", "source": "bundled-procedural"},
+    "mars-gale": {"label": "Mars Gale Crater Analogue", "source": "bundled-procedural", "body": "mars"},
+    # Real HiRISE DTMs (require download first)
+    "hirise-jezero-delta": {
+        "label": "🛰️ Jezero Crater Delta (HiRISE Real DTM)",
+        "source": "hirise-dtm",
+        "body": "mars",
+        "hirise_id": "jezero-delta",
+    },
+    "hirise-gale-msl": {
+        "label": "🛰️ Gale Crater / Curiosity Landing (HiRISE Real DTM)",
+        "source": "hirise-dtm",
+        "body": "mars",
+        "hirise_id": "gale-msl-landing",
+    },
+    "hirise-nili-fossae": {
+        "label": "🛰️ Nili Fossae Carbonate (HiRISE Real DTM)",
+        "source": "hirise-dtm",
+        "body": "mars",
+        "hirise_id": "nili-fossae",
+    },
 }
-
 
 class AnalyzeRequest(BaseModel):
     sample: str
+    ai_enhance: bool = False  # Whether to apply AI DEM enhancement
 
 
 class ErrorDetail(BaseModel):
@@ -52,14 +85,53 @@ def _layers_to_schema(layers: dict) -> AnalysisLayers:
     )
 
 
-def build_payload(elevation_grid, metadata: dict) -> AnalysisPayload:
+def apply_ai_enhancement(elevation_grid, metadata: dict):
+    """Run the Terrain GAN on the elevation grid, or fail loudly (501) when
+    the model is unavailable — never silently return unenhanced data the
+    caller believes is AI-processed."""
+    from ai.runtime import enhance_elevation, model_available
+
+    available, reason = model_available()
+    if not available:
+        raise HTTPException(
+            status_code=501,
+            detail=ErrorDetail(code="MODEL_UNAVAILABLE", message=reason).model_dump(),
+        )
+
+    enhanced = enhance_elevation(elevation_grid)
+    metadata = {
+        **metadata,
+        "grid_size": int(enhanced.shape[0]),
+        "source": f"{metadata['source']}+ai-enhanced",
+        "disclaimer": (
+            (metadata.get("disclaimer") or "")
+            + " Elevation refined by Terrain GAN; treat as estimate, not survey data."
+        ).strip(),
+    }
+    return enhanced, metadata
+
+
+def build_payload(
+    elevation_grid,
+    metadata: dict,
+    progress: Callable[[str, int], None] | None = None,
+    job_id: str | None = None,
+) -> AnalysisPayload:
+    """Run full analysis. ``progress(stage, pct)`` is invoked at each stage
+    boundary so async job runners can publish status (no-op for sync API).
+    ``job_id`` keys the artifact directory; defaults to a fresh UUID."""
+    notify = progress or (lambda stage, pct: None)
     world_scale_m = metadata.get("world_scale_m", 200.0)
     height_scale_m = metadata.get("height_scale_m", 30.0)
     size = int(elevation_grid.shape[0])
     cell_size_m = metadata.get("resolution_m_per_px", world_scale_m / (size - 1))
 
     elevation_m = elevation_grid * height_scale_m
+
+    notify("Computing hazard layers", 30)
     layers = analyze_terrain(elevation_grid, cell_size_m=cell_size_m)
+
+    notify("Ranking landing zones", 60)
     landing_zones: list[LandingZone] = rank_landing_zones(
         elevation_m, layers, scale_m=world_scale_m
     )
@@ -88,12 +160,23 @@ def build_payload(elevation_grid, metadata: dict) -> AnalysisPayload:
         data=elevation_m.reshape(-1).astype(float).tolist(),
     )
 
+    notify("Writing artifacts", 85)
+    job_id = job_id or uuid.uuid4().hex
+    try:
+        artifacts = write_analysis_artifacts(job_id, elevation_m, layers, OUTPUT_DIR)
+    except OSError as exc:
+        # Texture artifacts are an optimisation; a full JSON payload still works.
+        logger.warning("Artifact write failed for job %s: %s", job_id, exc)
+        artifacts = None
+
     return AnalysisPayload(
         api_version=API_VERSION,
+        job_id=job_id,
         metadata=terrain_meta,
         terrain=terrain_grid,
         layers=_layers_to_schema(layers),
         landing_zones=landing_zones,
+        artifacts=artifacts,
     )
 
 
@@ -102,6 +185,12 @@ app = FastAPI(
     version=API_VERSION,
     description="Backend-first terrain risk assessment and landing decision support.",
 )
+
+app.mount("/artifacts", StaticFiles(directory=OUTPUT_DIR), name="artifacts")
+
+from jobs.routes import router as jobs_router  # noqa: E402 — needs OUTPUT_DIR defined
+
+app.include_router(jobs_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -119,13 +208,74 @@ app.add_middleware(
 
 @app.get("/api/v1/samples")
 def get_samples():
+    """List all available terrain samples (procedural + real HiRISE DTMs)."""
+    samples = []
+    for sid, info in SAMPLE_REGISTRY.items():
+        entry = {
+            "id": sid,
+            "label": info["label"],
+            "source": info["source"],
+            "body": info.get("body", "mars"),
+        }
+        # Check if HiRISE DTM is cached
+        if info["source"] == "hirise-dtm":
+            try:
+                from data.hirise_downloader import get_cache_path
+                entry["cached"] = get_cache_path(info["hirise_id"]).exists()
+            except Exception:
+                entry["cached"] = False
+        else:
+            entry["cached"] = True  # Procedural samples are always available
+        samples.append(entry)
+
     return {
         "api_version": API_VERSION,
-        "samples": [
-            {"id": sid, "label": info["label"], "source": info["source"]}
-            for sid, info in SAMPLE_REGISTRY.items()
-        ],
+        "samples": samples,
     }
+
+
+@app.get("/api/v1/hirise-catalog")
+def get_hirise_catalog():
+    """List available HiRISE DTMs with download status."""
+    try:
+        from data.hirise_downloader import list_curated_dtms
+        return {
+            "api_version": API_VERSION,
+            "dtms": list_curated_dtms(),
+        }
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail=ErrorDetail(
+                code="HIRISE_MODULE_MISSING",
+                message="HiRISE downloader module not available.",
+            ).model_dump(),
+        )
+
+
+@app.post("/api/v1/hirise-download/{dtm_id}")
+def download_hirise_dtm(dtm_id: str):
+    """Download a HiRISE DTM from AWS (can take several minutes)."""
+    try:
+        from data.hirise_downloader import download_dtm
+        path = download_dtm(dtm_id)
+        return {
+            "api_version": API_VERSION,
+            "status": "downloaded",
+            "dtm_id": dtm_id,
+            "path": str(path),
+            "size_mb": round(path.stat().st_size / 1e6, 1),
+        }
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorDetail(code="UNKNOWN_DTM", message=str(exc)).model_dump(),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=ErrorDetail(code="DOWNLOAD_FAILED", message=str(exc)).model_dump(),
+        )
 
 
 @app.post("/api/v1/analyze", response_model=AnalysisPayload)
@@ -142,7 +292,41 @@ def analyze_sample(request: AnalyzeRequest):
             ).model_dump(),
         )
 
-    elevation, metadata = generate_sample(request.sample)
+    sample_info = SAMPLE_REGISTRY[request.sample]
+
+    # Route to appropriate data source
+    if sample_info["source"] == "hirise-dtm":
+        # Load real HiRISE DTM data
+        try:
+            from data.hirise_downloader import load_dtm_as_numpy
+            hirise_id = sample_info["hirise_id"]
+            elevation, metadata = load_dtm_as_numpy(hirise_id, target_size=512)
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=ErrorDetail(
+                    code="DTM_NOT_CACHED",
+                    message=(
+                        f"HiRISE DTM '{sample_info['hirise_id']}' not downloaded. "
+                        f"Call POST /api/v1/hirise-download/{sample_info['hirise_id']} first."
+                    ),
+                ).model_dump(),
+            )
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail=ErrorDetail(
+                    code="HIRISE_MODULE_MISSING",
+                    message="HiRISE downloader not available. Install rasterio.",
+                ).model_dump(),
+            )
+    else:
+        # Original procedural generation
+        elevation, metadata = generate_sample(request.sample)
+
+    if request.ai_enhance:
+        elevation, metadata = apply_ai_enhancement(elevation, metadata)
+
     return build_payload(elevation, metadata)
 
 
@@ -178,7 +362,16 @@ async def analyze_upload(file: Annotated[UploadFile, File(...)]):
         )
 
     try:
-        elevation, metadata = ingest_image_bytes(content)
+        if ct in {"image/tiff", "image/x-tiff"} or file.filename.lower().endswith((".tif", ".tiff")):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                elevation, metadata = ingest_geotiff(tmp_path)
+            finally:
+                os.remove(tmp_path)
+        else:
+            elevation, metadata = ingest_image_bytes(content)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,

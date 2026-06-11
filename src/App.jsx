@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import IntroScreen from './components/IntroScreen';
 import HUD from './components/HUD';
+import DebugOverlay from './components/DebugOverlay';
 import SceneCanvas from './scene/SceneCanvas';
 import { inspectTerrainPoint, sampleHeight, sampleRaster, hazardLevel } from './engine/terrain';
 import { createLanderState, updateLander, computeAutopilot } from './engine/physics';
 import { analyzeSample, analyzeUpload, fetchSampleCatalog } from './lib/api';
-import { analyzeFallbackSample, getFallbackSamples } from './lib/fallbackAnalysis';
+import { generateMissionReport, downloadReport } from './engine/missionReport';
 import {
   resumeAudio,
   startWind,
@@ -57,11 +58,15 @@ export default function App() {
   const [missionReport, setMissionReport] = useState(null);
   const [autopilot, setAutopilot] = useState(true);
   const [backendMode, setBackendMode] = useState('connecting');
+  const [debugMode, setDebugMode] = useState(false);
 
   const keysRef = useRef({});
   const landerRef = useRef(null);
   const rafRef = useRef(null);
   const lastTimeRef = useRef(null);
+
+  // Separate state for HUD to reduce App re-renders
+  const [hudState, setHudState] = useState({});
 
   const selectedZone = useMemo(
     () => analysis?.landingZones?.find((zone) => zone.id === selectedZoneId) || null,
@@ -72,12 +77,18 @@ export default function App() {
     ? [selectedZone.x, selectedZone.y, selectedZone.z, selectedZone.radius]
     : null;
   const landingTargetHazard = selectedZone
-    ? hazardLevel((100 - selectedZone.score) / 100)
+    ? (selectedZone.classification === 'unsafe' ? 2 : selectedZone.classification === 'caution' ? 1 : 0)
     : 0;
 
   useEffect(() => {
-    const onDown = (e) => { keysRef.current[e.key.toLowerCase()] = true; };
-    const onUp = (e) => { keysRef.current[e.key.toLowerCase()] = false; };
+    const onDown = (e) => { 
+      const key = e.key.toLowerCase();
+      keysRef.current[key] = true; 
+    };
+    const onUp = (e) => { 
+      const key = e.key.toLowerCase();
+      keysRef.current[key] = false; 
+    };
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup', onUp);
     return () => {
@@ -88,16 +99,23 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    setBackendMode('connecting');
     fetchSampleCatalog()
-      .then((samples) => {
+      .then((catalog) => {
         if (!active) return;
+        const samples = Array.isArray(catalog) ? catalog : catalog.samples || [];
+        const mode = Array.isArray(catalog) ? 'online' : catalog.backendMode || 'error';
         setSampleCatalog(samples);
-        setBackendMode('online');
+        setBackendMode(mode);
+        if (mode !== 'online') {
+          setAnalysisError('Backend unavailable. Using local demo terrain.');
+        }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!active) return;
-        setSampleCatalog(getFallbackSamples());
-        setBackendMode('fallback');
+        console.warn('Backend unavailable, using limited functionality.');
+        setAnalysisError('Backend unavailable. Using local mode.');
+        setBackendMode('error');
       });
     return () => {
       active = false;
@@ -127,6 +145,7 @@ export default function App() {
     setAnalysis(result);
     setMissionReport(null);
     setLanderState(null);
+    setHudState({});
     landerRef.current = null;
     const topZone = result?.landingZones?.[0] || null;
     setSelectedZoneId(topZone?.id || null);
@@ -143,16 +162,14 @@ export default function App() {
     setAnalysisStatus('loading');
     setAnalysisError('');
     try {
-      const result = backendMode === 'online'
-        ? await analyzeSample(sampleId)
-        : analyzeFallbackSample(sampleId);
+      const result = await analyzeSample(sampleId);
       applyAnalysisResult(result);
       setAnalysisStatus('ready');
     } catch (error) {
       setAnalysisStatus('error');
       setAnalysisError(error.message || 'Analysis failed.');
     }
-  }, [applyAnalysisResult, backendMode]);
+  }, [applyAnalysisResult]);
 
   const handleUpload = useCallback(async (file) => {
     if (!file) return;
@@ -193,8 +210,11 @@ export default function App() {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
     const state = createLanderState(selectedZone.x, selectedZone.z, 120);
+    state.targetX = selectedZone.x;
+    state.targetZ = selectedZone.z;
     landerRef.current = state;
-    setLanderState(state);
+    setLanderState(state); // Initial state for sync
+    setHudState(state);
     setMissionReport(null);
 
     resumeAudio();
@@ -202,6 +222,7 @@ export default function App() {
     setPhase('descent');
     lastTimeRef.current = performance.now();
 
+    let frameCount = 0;
     const loop = (time) => {
       const dt = Math.min((time - (lastTimeRef.current || time)) / 1000, 0.05);
       lastTimeRef.current = time;
@@ -212,8 +233,10 @@ export default function App() {
           stopThruster();
           stopWarningBeep();
           playImpact(stateRef.crashed);
-          setMissionReport(createMissionReport(analysis, selectedZone, stateRef));
-          setLanderState({ ...stateRef });
+          const finalReport = createMissionReport(analysis, selectedZone, stateRef);
+          setMissionReport(finalReport);
+          setLanderState({ ...stateRef }); // Final state sync
+          setHudState({ ...stateRef });
           setPhase('report');
         }
         return;
@@ -222,17 +245,36 @@ export default function App() {
       if (!autopilot) {
         const keys = keysRef.current;
         let throttle = stateRef.throttle;
-        if (keys.w || keys.arrowup) throttle = Math.min(1, throttle + 2 * dt);
-        else if (keys.s || keys.arrowdown) throttle = Math.max(0, throttle - 2 * dt);
+        
+        // W/S: MAIN ENGINE THROTTLE
+        if (keys.w || keys.arrowup) throttle = Math.min(1, throttle + 1.5 * dt);
+        else if (keys.s || keys.arrowdown) throttle = Math.max(0, throttle - 1.5 * dt);
         stateRef.throttle = throttle;
+        
+        // A/D: STRAFE LEFT/RIGHT (LATERAL X)
         stateRef.lateralX = (keys.d ? 1 : 0) + (keys.a ? -1 : 0);
-        stateRef.lateralZ = (keys.q ? -1 : 0) + (keys.e ? 1 : 0);
+        
+        // Q/E: YAW CONTROL
+        stateRef.rcsYaw = (keys.e ? 0.6 : 0) + (keys.q ? -0.6 : 0);
+        
+        // ARROW KEYS: FINE LATERAL CONTROL (X/Z)
+        if (keys.arrowleft) stateRef.lateralX = -1;
+        if (keys.arrowright) stateRef.lateralX = 1;
+        stateRef.lateralZ = (keys.arrowdown ? 1 : 0) + (keys.arrowup ? -1 : 0);
+
+        // Stabilize attitude if no pitch/roll commands
+        stateRef.pitchCmd = 0;
+        stateRef.rollCmd = 0;
       } else {
         const groundH = sampleHeight(analysis.terrain, stateRef.x, stateRef.z);
-        const ap = computeAutopilot(stateRef, groundH);
+        const ap = computeAutopilot(stateRef, groundH, analysis.layers.hazard, analysis.terrain);
         stateRef.throttle = ap.throttle;
         stateRef.lateralX = ap.lateralX;
         stateRef.lateralZ = ap.lateralZ;
+        stateRef.rcsYaw = ap.rcsYaw;
+        stateRef.pitchCmd = ap.pitchCmd;
+        stateRef.rollCmd = ap.rollCmd;
+        stateRef.guidanceMode = ap.guidanceMode;
       }
 
       const groundH = sampleHeight(analysis.terrain, stateRef.x, stateRef.z);
@@ -240,9 +282,15 @@ export default function App() {
         hazard: sampleRaster(analysis.layers.hazard, analysis.terrain, stateRef.x, stateRef.z),
         traversability: sampleRaster(analysis.layers.traversability, analysis.terrain, stateRef.x, stateRef.z),
       };
+      
       const newState = updateLander(stateRef, dt, groundH, surfaceAssessment);
       landerRef.current = newState;
-      setLanderState({ ...newState });
+
+      // Update HUD state at 30fps to save React overhead
+      frameCount++;
+      if (frameCount % 2 === 0) {
+        setHudState({ ...newState });
+      }
 
       setThrusterLevel(newState.throttle);
       const alt = newState.y - groundH;
@@ -258,6 +306,7 @@ export default function App() {
     rafRef.current = requestAnimationFrame(loop);
   }, [analysis, autopilot, selectedZone]);
 
+
   const handleReturnToInspection = useCallback(() => {
     setPhase('inspect3d');
   }, []);
@@ -265,6 +314,15 @@ export default function App() {
   const handleToggleAutopilot = useCallback(() => {
     setAutopilot((current) => !current);
   }, []);
+
+  const handleToggleDebug = useCallback(() => {
+    setDebugMode((current) => !current);
+  }, []);
+
+  const handleExportReport = useCallback(() => {
+    const report = generateMissionReport(analysis, selectedZone, landerRef.current, missionReport);
+    downloadReport(report);
+  }, [analysis, selectedZone, missionReport]);
 
   if (phase === 'intro') {
     return <IntroScreen onStart={handleStart} />;
@@ -275,13 +333,15 @@ export default function App() {
       <SceneCanvas
         phase={phase}
         analysis={analysis}
-        landerState={landerState}
+        landerRef={landerRef}
         viewMode={viewMode}
         landingTarget={landingTarget}
         landingTargetHazard={landingTargetHazard}
         inspectedPoint={inspectedPoint}
         onInspectPoint={handleInspectPoint}
+        debugMode={debugMode}
       />
+      <pre id="perf-stats" className="perf-stats" />
       <HUD
         phase={phase}
         backendMode={backendMode}
@@ -292,9 +352,10 @@ export default function App() {
         selectedZoneId={selectedZoneId}
         inspectedPoint={inspectedPoint}
         missionReport={missionReport}
-        landerState={landerState || {}}
+        landerState={hudState || {}}
         viewMode={viewMode}
         autopilot={autopilot}
+        debugMode={debugMode}
         onAnalyzeSample={handleAnalyzeSample}
         onUpload={handleUpload}
         onSelectZone={handleSelectZoneById}
@@ -302,6 +363,14 @@ export default function App() {
         onInitDescent={handleInitDescent}
         onReturnToInspection={handleReturnToInspection}
         onToggleAutopilot={handleToggleAutopilot}
+        onToggleDebug={handleToggleDebug}
+        onExportReport={handleExportReport}
+      />
+      <DebugOverlay
+        analysis={analysis}
+        inspectedPoint={inspectedPoint}
+        selectedZone={selectedZone}
+        visible={debugMode}
       />
     </div>
   );

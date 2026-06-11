@@ -170,3 +170,100 @@ export function stopAll() {
   stopThruster();
   stopWarningBeep();
 }
+
+/* ── UI cues + voice brief ──
+ * Mute applies to UI cues and speech only; flight sounds are governed by
+ * mission phase. Mute preference persists in localStorage.
+ */
+
+const MUTE_KEY = 'bhuvan.audio.muted';
+
+let uiMuted = (() => {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+
+export function isMuted() {
+  return uiMuted;
+}
+
+export function toggleMute() {
+  uiMuted = !uiMuted;
+  try {
+    localStorage.setItem(MUTE_KEY, uiMuted ? '1' : '0');
+  } catch {
+    // private mode — non-persistent mute is fine
+  }
+  if (uiMuted) window.speechSynthesis?.cancel();
+  return uiMuted;
+}
+
+function blip({ freq = 880, duration = 0.06, type = 'square', gain = 0.04, when = 0 }) {
+  if (uiMuted) return;
+  const ac = getCtx();
+  if (ac.state === 'suspended') ac.resume();
+  const osc = ac.createOscillator();
+  const amp = ac.createGain();
+  const t0 = ac.currentTime + when;
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  amp.gain.setValueAtTime(gain, t0);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.connect(amp);
+  amp.connect(ac.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
+}
+
+/** Short neutral tick — layer switches, list selections. */
+export function uiTick() {
+  blip({ freq: 1320, duration: 0.04, gain: 0.03 });
+}
+
+/** Two-tone confirm — analysis complete, zone locked. */
+export function uiConfirm() {
+  blip({ freq: 740, duration: 0.07 });
+  blip({ freq: 1108, duration: 0.09, when: 0.08 });
+}
+
+/** Descending two-tone — errors, mission failure. */
+export function uiAlert() {
+  blip({ freq: 622, duration: 0.12, type: 'sawtooth', gain: 0.05 });
+  blip({ freq: 415, duration: 0.16, type: 'sawtooth', gain: 0.05, when: 0.13 });
+}
+
+/** Speak a mission brief of the current analysis through SpeechSynthesis. */
+export function speakMissionBrief(analysis) {
+  if (uiMuted || !analysis || !window.speechSynthesis) return;
+
+  const meta = analysis.metadata || {};
+  const zones = analysis.landingZones || [];
+  const parts = [
+    `Terrain analysis complete for ${meta.terrainName || 'unknown terrain'}.`,
+    `Safe landing area: ${Math.round(meta.safeAreaPct ?? 0)} percent.`,
+  ];
+  if (zones.length === 0) {
+    parts.push('No viable landing zones identified. Recommend alternate site.');
+  } else {
+    const top = zones[0];
+    parts.push(
+      `${zones.length} candidate zone${zones.length > 1 ? 's' : ''} identified.`,
+      `Primary candidate: ${top.classification} zone, score ${Math.round(top.score)},` +
+        ` radius ${Math.round(top.radius)} meters,` +
+        ` confidence ${Math.round((top.confidence ?? 1) * 100)} percent.`
+    );
+  }
+
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(parts.join(' '));
+  utterance.rate = 1.05;
+  utterance.pitch = 0.9;
+  window.speechSynthesis.speak(utterance);
+}
+
+export function stopSpeech() {
+  window.speechSynthesis?.cancel();
+}

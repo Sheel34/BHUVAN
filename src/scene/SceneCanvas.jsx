@@ -1,23 +1,25 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, ChromaticAberration } from '@react-three/postprocessing';
-import { BlendFunction } from 'postprocessing';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import Terrain from './Terrain';
+import TerrainChunked from './TerrainChunked';
 import Lander from './Lander';
+import PerfStats from './PerfStats';
 
-/* ── Camera Controller (ONLY active during descent/landed — NOT orbital) ── */
-function CameraRig({ phase, landerState }) {
+const INSPECTION_PHASES = new Set(['analyze', 'inspect3d']);
+
+/* ── Camera Controller (active only during scripted descent/report phases) ── */
+function CameraRig({ phase, landerRef }) {
   const { camera } = useThree();
   const targetPos = useRef(new THREE.Vector3(0, 120, 30));
   const targetLook = useRef(new THREE.Vector3(0, 0, 0));
 
   useFrame((_, dt) => {
-    // During orbital phase, OrbitControls handles the camera — we do nothing.
-    if (phase === 'orbital') return;
+    if (phase !== 'descent' && phase !== 'report' && phase !== 'landed' && phase !== 'crashed') return;
 
     const lerpSpeed = Math.min(1, 2.5 * dt);
+    const landerState = landerRef.current;
 
     if (phase === 'descent' && landerState) {
       const above = 6 + landerState.y * 0.08;
@@ -27,7 +29,7 @@ function CameraRig({ phase, landerState }) {
         landerState.z + 12
       );
       targetLook.current.set(landerState.x, landerState.y - 2, landerState.z);
-    } else if ((phase === 'landed' || phase === 'crashed') && landerState) {
+    } else if ((phase === 'landed' || phase === 'crashed' || phase === 'report') && landerState) {
       const t = Date.now() * 0.0003;
       targetPos.current.set(
         landerState.x + Math.cos(t) * 20,
@@ -42,6 +44,46 @@ function CameraRig({ phase, landerState }) {
   });
 
   return null;
+}
+
+function TerrainInspectionControls({ enabled, target }) {
+  const controlsRef = useRef();
+
+  useEffect(() => {
+    if (!controlsRef.current) return;
+    controlsRef.current.target.set(target[0], target[1], target[2]);
+    controlsRef.current.update();
+  }, [target]);
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enabled={enabled}
+      enableDamping
+      dampingFactor={0.08}
+      rotateSpeed={0.48}
+      zoomSpeed={0.85}
+      panSpeed={0.75}
+      enablePan
+      enableZoom
+      enableRotate
+      screenSpacePanning={false}
+      mouseButtons={{
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN,
+      }}
+      touches={{
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN,
+      }}
+      maxPolarAngle={Math.PI / 1.8}
+      minPolarAngle={0.05}
+      minDistance={2}
+      maxDistance={500}
+    />
+  );
 }
 
 /* ── Landing Zone Marker ── */
@@ -132,16 +174,12 @@ function Effects() {
   return (
     <EffectComposer>
       <Bloom
-        intensity={0.6}
+        intensity={0.28}
         luminanceThreshold={0.7}
         luminanceSmoothing={0.3}
         mipmapBlur
       />
       <Vignette eskil={false} offset={0.15} darkness={0.8} />
-      <ChromaticAberration
-        blendFunction={BlendFunction.NORMAL}
-        offset={new THREE.Vector2(0.0008, 0.0008)}
-      />
     </EffectComposer>
   );
 }
@@ -150,16 +188,22 @@ function Effects() {
 export default function SceneCanvas({
   phase,
   analysis,
-  landerState,
+  landerRef,
   viewMode,
   landingTarget,
   landingTargetHazard,
   inspectedPoint,
   onInspectPoint,
+  debugMode = false,
 }) {
-  const controlsRef = useRef();
   const terrain = analysis?.terrain;
   const layers = analysis?.layers;
+  const inspectionControlsEnabled = INSPECTION_PHASES.has(phase);
+  const inspectionTarget = useMemo(() => {
+    if (inspectedPoint) return [inspectedPoint.x, inspectedPoint.y, inspectedPoint.z];
+    if (landingTarget) return [landingTarget[0], landingTarget[1], landingTarget[2]];
+    return [0, 0, 0];
+  }, [inspectedPoint, landingTarget]);
 
   // Only fire on click — no onPointerMove (that was causing lag/re-renders)
   const handleClick = useCallback(
@@ -174,17 +218,26 @@ export default function SceneCanvas({
 
   return (
     <Canvas
-      shadows
+      shadows="soft"
+      dpr={[1, 1.5]}
       camera={{ position: [0, 120, 30], fov: 55, near: 0.5, far: 500 }}
-      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+      gl={{
+        antialias: false,
+        powerPreference: 'high-performance',
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.2,
+      }}
+      onCreated={({ gl }) => {
+        gl.shadowMap.type = THREE.PCFSoftShadowMap;
+      }}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
     >
       <Lighting />
-      <Stars radius={200} depth={80} count={3000} factor={4} saturation={0.1} fade speed={0.5} />
+      <Stars radius={200} depth={80} count={1400} factor={4} saturation={0.1} fade speed={0.25} />
       <GroundGrid />
 
       <group onClick={handleClick}>
-        {terrain && <Terrain terrain={terrain} layers={layers} viewMode={viewMode} />}
+        {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
       </group>
 
       {landingTarget && (
@@ -198,34 +251,20 @@ export default function SceneCanvas({
       {inspectedPoint && <InspectionMarker point={inspectedPoint} />}
 
       {(phase === 'descent' || phase === 'report') && (
-        <Lander landerState={landerState} />
+        <Lander landerRef={landerRef} />
       )}
 
       <CameraRig
         phase={phase}
-        landerState={landerState}
+        landerRef={landerRef}
       />
 
-      {phase === 'orbital' && (
-        <OrbitControls
-          ref={controlsRef}
-          makeDefault
-          enableDamping
-          dampingFactor={0.08}
-          rotateSpeed={0.4}
-          zoomSpeed={0.6}
-          panSpeed={0.4}
-          enablePan={true}
-          enableZoom={true}
-          enableRotate={true}
-          maxPolarAngle={Math.PI / 2.2}
-          minPolarAngle={0.2}
-          minDistance={30}
-          maxDistance={200}
-          target={[0, 0, 0]}
-        />
-      )}
+      <TerrainInspectionControls
+        enabled={inspectionControlsEnabled}
+        target={inspectionTarget}
+      />
 
+      <PerfStats enabled={debugMode} />
       <Effects />
     </Canvas>
   );

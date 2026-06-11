@@ -7,9 +7,11 @@ build/
 # Python / Backend
 venv/
 .venv/
+new_venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+get-pip.py
 
 # Environment / Secrets
 .env
@@ -31,3 +33,8 @@ cache/
 tmp/
 report/
 report.zip
+
+# Graphify tool output
+graphify-out/
+.graphify_python
+.graphify_community_summary.txt

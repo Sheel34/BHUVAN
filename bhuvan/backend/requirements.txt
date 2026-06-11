@@ -1,0 +1,11 @@
+# BHUVAN backend — Python 3.10
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29
+pydantic>=2.6,<3.0
+celery[redis]>=5.3,<6.0
+redis>=5.0
+numpy>=1.26,<3.0
+scipy>=1.11,<2.0
+httpx>=0.27                      # FastAPI TestClient + NASA Earthdata HTTP client (Phase 2)
+rasterio>=1.3                    # GeoTIFF ingestion of real DEMs (Phase 2)
+opencv-python-headless>=4.9      # raster image ops on elevation data (Phase 2)

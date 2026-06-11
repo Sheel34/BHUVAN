@@ -6,13 +6,9 @@ import cv2
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-try:
-    import rasterio  # type: ignore
-    from rasterio.enums import Resampling  # type: ignore
-
-    HAS_RASTERIO = True
-except ImportError:
-    HAS_RASTERIO = False
+import rasterio  # type: ignore
+from rasterio.enums import Resampling  # type: ignore
+from rasterio.errors import RasterioIOError
 
 DEFAULT_SIZE = 160
 DEFAULT_WORLD_SCALE_M = 200.0
@@ -115,35 +111,79 @@ def ingest_geotiff(
     path: str,
     target_size: int = 512,
 ) -> tuple[np.ndarray, dict]:
-    if not HAS_RASTERIO:
-        raise RuntimeError("rasterio is not installed. Run: pip install rasterio")
+    try:
+        with rasterio.open(path) as src:
+            # Validate CRS
+            if src.crs is None:
+                raise ValueError("GeoTIFF has no CRS defined. Please provide a georeferenced DEM.")
+            
+            crs_str = str(src.crs)
+            is_projected = src.crs.is_projected
+            
+            # Extract bounds and transform
+            bounds = src.bounds
+            native_res_m = abs(src.transform.a)
+            orig_width = src.width
+            orig_height = src.height
+            
+            # Validate resolution is reasonable
+            if native_res_m <= 0 or native_res_m > 1000:
+                raise ValueError(f"Invalid resolution: {native_res_m} m/pixel. Expected 0-1000 m/pixel.")
+            
+            # Calculate resampled resolution
+            resampled_res_m = native_res_m * (orig_width / target_size)
+            world_scale_m = resampled_res_m * target_size
+            
+            # Read and resample data
+            data = src.read(
+                1,
+                out_shape=(target_size, target_size),
+                resampling=Resampling.bilinear,
+            ).astype(np.float32)
+            
+            nodata = src.nodata
+            
+            # Extract additional metadata
+            metadata_extra = {
+                "original_width": orig_width,
+                "original_height": orig_height,
+                "bounds_left": bounds.left,
+                "bounds_right": bounds.right,
+                "bounds_bottom": bounds.bottom,
+                "bounds_top": bounds.top,
+                "is_projected_crs": is_projected,
+            }
+            
+    except RasterioIOError as e:
+        raise ValueError(f"Failed to read GeoTIFF: {e}") from e
 
-    with rasterio.open(path) as src:
-        data = src.read(
-            1,
-            out_shape=(1, target_size, target_size),
-            resampling=Resampling.bilinear,
-        ).astype(np.float32)
-
-        nodata = src.nodata
-        crs_str = str(src.crs) if src.crs else "unknown"
-        native_res_m = abs(src.transform.a)
-        orig_size = src.width
-        resampled_res_m = native_res_m * (orig_size / target_size)
-        world_scale_m = resampled_res_m * target_size
-
-    grid = data[0]
+    grid = data
+    
+    # Handle nodata values
     if nodata is not None:
         grid = np.where(grid == nodata, np.nan, grid)
-
+    
+    # Validate data range
+    valid_pixels = ~np.isnan(grid)
+    if valid_pixels.sum() < 0.1 * grid.size:
+        raise ValueError("GeoTIFF has insufficient valid data (<10% of pixels).")
+    
+    # Inpaint missing data
     nan_mask = np.isnan(grid).astype(np.uint8)
     if nan_mask.any():
         grid_filled = np.where(np.isnan(grid), 0.0, grid)
         grid = cv2.inpaint(grid_filled, nan_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
-
-    height_range_m = float(np.nanmax(grid) - np.nanmin(grid))
+    
+    # Calculate height statistics
+    height_min_m = float(np.nanmin(grid))
+    height_max_m = float(np.nanmax(grid))
+    height_range_m = height_max_m - height_min_m
+    
+    if height_range_m < 0.1:
+        raise ValueError(f"Terrain has insufficient height variation: {height_range_m:.2f}m")
+    
     normalised = _normalize_grid(grid)
-
+    
     return normalised, _make_metadata(
         "GeoTIFF DEM",
         "geotiff",
@@ -152,4 +192,7 @@ def ingest_geotiff(
         height_scale_m=height_range_m,
         crs=crs_str,
         native_resolution_m_per_px=native_res_m,
+        height_min_m=height_min_m,
+        height_max_m=height_max_m,
+        **metadata_extra,
     )
