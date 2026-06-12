@@ -46,7 +46,7 @@ function CameraRig({ phase, landerRef }) {
   return null;
 }
 
-function TerrainInspectionControls({ enabled, target }) {
+function TerrainInspectionControls({ enabled, target, worldScale = 200 }) {
   const controlsRef = useRef();
 
   useEffect(() => {
@@ -81,7 +81,7 @@ function TerrainInspectionControls({ enabled, target }) {
       maxPolarAngle={Math.PI / 1.8}
       minPolarAngle={0.05}
       minDistance={2}
-      maxDistance={500}
+      maxDistance={worldScale * 2.5}
     />
   );
 }
@@ -136,35 +136,37 @@ function InspectionMarker({ point }) {
 }
 
 /* ── Ground grid for spatial awareness ── */
-function GroundGrid() {
+function GroundGrid({ worldScale }) {
   return (
     <gridHelper
-      args={[200, 40, '#442200', '#331800']}
-      position={[0, -12, 0]}
+      args={[worldScale, 40, '#442200', '#331800']}
+      position={[0, -worldScale * 0.06, 0]}
     />
   );
 }
 
-/* ── Scene Lighting ── */
-function Lighting() {
+/* ── Scene Lighting — shadow frustum sized to the terrain ── */
+function Lighting({ worldScale }) {
+  const s = worldScale;
   return (
     <>
       <ambientLight intensity={0.25} color="#ffeedd" />
       <directionalLight
-        position={[60, 80, 30]}
+        position={[s * 0.3, s * 0.4, s * 0.15]}
         intensity={1.8}
         color="#fff5e0"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={250}
-        shadow-camera-left={-100}
-        shadow-camera-right={100}
-        shadow-camera-top={100}
-        shadow-camera-bottom={-100}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-far={s * 1.25}
+        shadow-camera-left={-s * 0.6}
+        shadow-camera-right={s * 0.6}
+        shadow-camera-top={s * 0.6}
+        shadow-camera-bottom={-s * 0.6}
+        shadow-bias={-0.0002}
       />
-      <directionalLight position={[-40, 20, -30]} intensity={0.3} color="#aabbff" />
-      <fog attach="fog" args={['#1a0a00', 80, 300]} />
+      <directionalLight position={[-s * 0.2, s * 0.1, -s * 0.15]} intensity={0.3} color="#aabbff" />
+      <fog attach="fog" args={['#1a0a00', s * 0.4, s * 1.6]} />
     </>
   );
 }
@@ -216,13 +218,20 @@ export default function SceneCanvas({
     [phase, onInspectPoint]
   );
 
+  const worldScale = terrain?.scale || 200;
+
   return (
     <Canvas
       shadows="soft"
-      dpr={[1, 1.5]}
-      camera={{ position: [0, 120, 30], fov: 55, near: 0.5, far: 500 }}
+      dpr={[1, 2]}
+      camera={{
+        position: [0, worldScale * 0.45, worldScale * 0.2],
+        fov: 55,
+        near: 0.5,
+        far: worldScale * 6,
+      }}
       gl={{
-        antialias: false,
+        antialias: true,
         powerPreference: 'high-performance',
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.2,
@@ -232,9 +241,17 @@ export default function SceneCanvas({
       }}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
     >
-      <Lighting />
-      <Stars radius={200} depth={80} count={1400} factor={4} saturation={0.1} fade speed={0.25} />
-      <GroundGrid />
+      <Lighting worldScale={worldScale} />
+      <Stars
+        radius={worldScale * 2.2}
+        depth={worldScale * 0.5}
+        count={2400}
+        factor={worldScale / 60}
+        saturation={0.1}
+        fade
+        speed={0.25}
+      />
+      <GroundGrid worldScale={worldScale} />
 
       <group onClick={handleClick}>
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
@@ -262,6 +279,7 @@ export default function SceneCanvas({
       <TerrainInspectionControls
         enabled={inspectionControlsEnabled}
         target={inspectionTarget}
+        worldScale={worldScale}
       />
 
       <PerfStats enabled={debugMode} />

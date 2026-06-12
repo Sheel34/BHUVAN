@@ -10,9 +10,11 @@ import rasterio  # type: ignore
 from rasterio.enums import Resampling  # type: ignore
 from rasterio.errors import RasterioIOError
 
-DEFAULT_SIZE = 160
-DEFAULT_WORLD_SCALE_M = 200.0
-DEFAULT_HEIGHT_SCALE_M = 30.0
+# 512-cell grid over a 2 km patch (~3.9 m/cell) — large-terrain defaults
+# sized for dedicated-GPU rendering via the chunked LOD pipeline.
+DEFAULT_SIZE = 512
+DEFAULT_WORLD_SCALE_M = 2000.0
+DEFAULT_HEIGHT_SCALE_M = 220.0
 
 
 def _normalize_grid(grid: np.ndarray) -> np.ndarray:

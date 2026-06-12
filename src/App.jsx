@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import HUD from './components/HUD';
 import DebugOverlay from './components/DebugOverlay';
 import GlobeOverlay from './components/GlobeOverlay';
+import SystemMonitor from './components/SystemMonitor';
 import SceneCanvas from './scene/SceneCanvas';
 import MoonGlobe from './scene/MoonGlobe';
 import { inspectTerrainPoint, sampleHeight, sampleRaster, hazardLevel } from './engine/terrain';
@@ -227,7 +228,8 @@ export default function App() {
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
-    const state = createLanderState(selectedZone.x, selectedZone.z, 120);
+    const descentStartY = Math.max(120, (analysis.terrain.maxH || 0) + 100);
+    const state = createLanderState(selectedZone.x, selectedZone.z, descentStartY);
     state.targetX = selectedZone.x;
     state.targetZ = selectedZone.z;
     landerRef.current = state;
@@ -346,6 +348,7 @@ export default function App() {
     return (
       <div className="simulation-root">
         <MoonGlobe textureUrls={moonTextures} onSiteSelected={handleGlobeSiteSelected} />
+        <SystemMonitor />
         <GlobeOverlay
           analysisStatus={analysisStatus}
           analysisError={analysisError}
@@ -371,6 +374,7 @@ export default function App() {
         debugMode={debugMode}
       />
       <pre id="perf-stats" className="perf-stats" />
+      <SystemMonitor />
       <HUD
         phase={phase}
         backendMode={backendMode}

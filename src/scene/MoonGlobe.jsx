@@ -310,7 +310,12 @@ export default function MoonGlobe({ textureUrls, onSiteSelected }) {
     <div className="globe-root">
       <Canvas
         camera={{ position: CAMERA_HOME.toArray(), fov: 42, near: 0.1, far: 200 }}
-        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+        gl={{
+          antialias: true,
+          powerPreference: 'high-performance',
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.05,
+        }}
         dpr={[1, 2]}
       >
         <color attach="background" args={['#040408']} />

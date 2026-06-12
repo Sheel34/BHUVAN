@@ -1235,3 +1235,125 @@ html, body, #root {
   .globe-overlay { padding: 28px 24px; }
   .globe-sites { display: none; }
 }
+
+/* ── System Monitor ──────────────────────────────────────────── */
+.sysmon {
+  position: absolute;
+  bottom: 56px;
+  right: 16px;
+  width: 232px;
+  z-index: 40;
+  font-family: var(--font-mono);
+  background: rgba(8, 10, 18, 0.72);
+  border: 1px solid rgba(140, 160, 200, 0.16);
+  border-radius: 12px;
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+  pointer-events: auto;
+  animation: globe-fade-in 0.5s ease both;
+}
+
+.sysmon.collapsed { width: 178px; }
+
+.sysmon-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(140, 160, 200, 0.1);
+}
+
+.sysmon.collapsed .sysmon-header { border-bottom: none; }
+
+.sysmon-title {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--text-dim);
+  flex: 1;
+}
+
+.sysmon-offline { color: var(--accent-orange); }
+
+.sysmon-fps { font-size: 10px; font-weight: 700; }
+
+.sysmon-controls { display: flex; gap: 2px; }
+
+.sysmon-controls button {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.sysmon-controls button:hover {
+  color: var(--text-primary);
+  background: rgba(140, 160, 200, 0.12);
+}
+
+.sysmon-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 9px; }
+
+.sysmon-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.sysmon-label { font-size: 9px; letter-spacing: 0.18em; color: var(--text-dim); }
+
+.sysmon-value { font-size: 11px; font-weight: 700; color: var(--text-primary); }
+
+.sysmon-detail { font-size: 9px; font-weight: 400; color: var(--text-dim); }
+
+.sysmon-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(140, 160, 200, 0.12);
+  overflow: hidden;
+}
+
+.sysmon-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease, background 0.6s ease;
+}
+
+.sysmon-inline { display: flex; justify-content: space-between; }
+
+.sysmon-nogpu { font-size: 9px; letter-spacing: 0.08em; color: var(--text-dim); }
+
+.sysmon-specline {
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sysmon-reopen {
+  position: absolute;
+  bottom: 56px;
+  right: 0;
+  z-index: 40;
+  padding: 8px 10px 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  background: rgba(8, 10, 18, 0.72);
+  border: 1px solid rgba(140, 160, 200, 0.16);
+  border-right: none;
+  border-radius: 10px 0 0 10px;
+  backdrop-filter: blur(16px);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.sysmon-reopen:hover { color: var(--accent-cyan); }

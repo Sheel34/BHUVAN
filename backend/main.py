@@ -269,6 +269,22 @@ def get_samples():
     }
 
 
+@app.get("/api/v1/system/specs")
+def get_system_specs():
+    """Static machine description (CPU/RAM/GPU model)."""
+    from system.telemetry import get_static_specs
+
+    return {"api_version": API_VERSION, **get_static_specs()}
+
+
+@app.get("/api/v1/system/stats")
+def get_system_stats():
+    """Live hardware load: CPU %, RAM, GPU util/VRAM/temp/power (NVML)."""
+    from system.telemetry import get_live_stats
+
+    return {"api_version": API_VERSION, **get_live_stats()}
+
+
 @app.get("/api/v1/moon/textures")
 def get_moon_textures():
     """Globe texture status. Frontend uses the returned URLs for the hero moon."""

@@ -9,6 +9,14 @@ python-multipart
 celery>=5.4
 redis>=5.0
 
+# hardware telemetry (SystemMonitor panel)
+psutil>=5.9
+nvidia-ml-py>=12.0
+
+# GPU compute — install with the CUDA index for the dedicated GPU:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+# torch  (intentionally not pinned here; CPU wheel would shadow CUDA build)
+
 # dev / test
 pytest>=8.0.0
 httpx>=0.27.0

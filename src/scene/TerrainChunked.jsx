@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { analysisColor } from '../engine/terrain';
 
 const MIN_TILE_CELLS = 32;
-const TARGET_TILE_VERTS = 33;
+const TARGET_TILE_VERTS = 65;
 const REFINE_DISTANCE_FACTOR = 2.2;
 const MAX_VISIBLE_TILES = 160;
 const MAX_CACHED_GEOMETRIES = 384;
