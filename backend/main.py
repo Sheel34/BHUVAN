@@ -218,7 +218,7 @@ def build_payload(
     return payload
 
 app = FastAPI(
-    title="ARES Terrain Intelligence API",
+    title="BHUVAN Terrain Intelligence API",
     version=API_VERSION,
     description="Backend-first terrain risk assessment and landing decision support.",
 )

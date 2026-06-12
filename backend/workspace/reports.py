@@ -131,5 +131,5 @@ def render_report(record: dict, kind: str) -> str:
         doc += _regions_section(intel)
         doc += _elevation_section(intel)
 
-    doc += "\n---\n*ARES // Planetary Intelligence Platform — automated analysis report.*\n"
+    doc += "\n---\n*BHUVAN // Planetary Intelligence Platform — automated analysis report.*\n"
     return doc

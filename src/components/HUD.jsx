@@ -96,7 +96,7 @@ export default function HUD({
             ◂ GLOBE
           </button>
           <div className="hud-branding">
-            <span className="hud-logo">ARES</span>
+            <span className="hud-logo">BHUVAN</span>
             <span className="hud-version">PLANETARY INTELLIGENCE</span>
           </div>
           <div className={`hud-conn-indicator ${backendMode}`}>
@@ -233,7 +233,7 @@ export default function HUD({
             )}
 
             <div className="hud-section">
-              <div className="hud-section-label">LANDING ZONES · {formatNum(safeAreaPct)}% SAFE</div>
+              <div className="hud-section-label">SAFE ZONES · {formatNum(safeAreaPct)}% OF AREA</div>
               <div className="hud-zone-stack">
                 {(analysis.landingZones || []).slice(0, 3).map((zone, index) => (
                   <button

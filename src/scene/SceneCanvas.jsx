@@ -37,10 +37,10 @@ function TerrainInspectionControls({ target, worldScale = 200 }) {
         ONE: THREE.TOUCH.ROTATE,
         TWO: THREE.TOUCH.DOLLY_PAN,
       }}
-      maxPolarAngle={Math.PI / 1.8}
+      maxPolarAngle={Math.PI / 2.08}
       minPolarAngle={0.05}
       minDistance={2}
-      maxDistance={worldScale * 2.5}
+      maxDistance={worldScale * 1.6}
     />
   );
 }
@@ -79,16 +79,18 @@ function LandingMarker({ position, hazardLevel, radius = 3.5 }) {
 }
 
 function InspectionMarker({ point, worldScale }) {
-  const s = Math.max(0.8, worldScale / 250);
+  // Flat survey reticle hugging the surface — an instrument cursor,
+  // not a landing pin.
+  const s = Math.max(1.2, worldScale / 160);
   return (
-    <group position={[point.x, point.y + s, point.z]}>
-      <mesh>
-        <sphereGeometry args={[s, 20, 20]} />
-        <meshBasicMaterial color="#44aaff" />
+    <group position={[point.x, point.y + s * 0.08, point.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[s * 0.8, s, 48]} />
+        <meshBasicMaterial color="#93a4c4" transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <mesh position={[0, s * 1.5, 0]}>
-        <cylinderGeometry args={[s * 0.06, s * 0.06, s * 3, 8]} />
-        <meshBasicMaterial color="#44aaff" />
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[s * 0.06, s * 0.14, 24]} />
+        <meshBasicMaterial color="#93a4c4" transparent opacity={0.9} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -120,7 +122,7 @@ function InterestBeacon({ poi, terrain }) {
     <group position={[poi.x, y, poi.z]}>
       <mesh ref={ref} position={[0, beamH / 2, 0]}>
         <cylinderGeometry args={[beamH * 0.012, beamH * 0.03, beamH, 8, 1, true]} />
-        <meshBasicMaterial color="#00ddcc" transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color="#93a4c4" transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       <Html distanceFactor={terrain ? terrain.scale * 0.18 : 40} position={[0, beamH * 1.08, 0]} style={{ pointerEvents: 'none' }}>
         <div className="poi-label">{poi.kind}</div>
@@ -133,8 +135,8 @@ function InterestBeacon({ poi, terrain }) {
 function EdgeApron({ worldScale, minH }) {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.002, 0]}>
-      <circleGeometry args={[worldScale * 4, 64]} />
-      <meshStandardMaterial color="#241307" roughness={1} metalness={0} />
+      <circleGeometry args={[worldScale * 6, 64]} />
+      <meshStandardMaterial color="#101117" roughness={1} metalness={0} />
     </mesh>
   );
 }
@@ -160,7 +162,9 @@ function Lighting({ worldScale }) {
         shadow-bias={-0.0002}
       />
       <directionalLight position={[-s * 0.2, s * 0.1, -s * 0.15]} intensity={0.3} color="#aabbff" />
-      <fog attach="fog" args={['#170b03', s * 0.35, s * 1.35]} />
+      {/* Fog color MUST match the scene background — any mismatch reads as
+          holes in the terrain at grazing camera angles. */}
+      <fog attach="fog" args={['#0b0c10', s * 0.45, s * 1.8]} />
     </>
   );
 }
@@ -186,6 +190,7 @@ export default function SceneCanvas({
   landingTarget,
   landingTargetHazard,
   inspectedPoint,
+  focusPoint,
   interestRegions = [],
   onInspectPoint,
   debugMode = false,
@@ -193,10 +198,10 @@ export default function SceneCanvas({
   const terrain = analysis?.terrain;
   const layers = analysis?.layers;
   const inspectionTarget = useMemo(() => {
-    if (inspectedPoint) return [inspectedPoint.x, inspectedPoint.y, inspectedPoint.z];
+    if (focusPoint) return [focusPoint.x, focusPoint.y, focusPoint.z];
     if (landingTarget) return [landingTarget[0], landingTarget[1], landingTarget[2]];
     return [0, 0, 0];
-  }, [inspectedPoint, landingTarget]);
+  }, [focusPoint, landingTarget]);
 
   const handleClick = useCallback(
     (e) => {
@@ -204,6 +209,20 @@ export default function SceneCanvas({
         e.stopPropagation();
         onInspectPoint(e.point.x, e.point.z);
       }
+    },
+    [onInspectPoint]
+  );
+
+  // Live hover probe — the surface reticle and readout follow the cursor
+  // without clicking. Throttled so React state updates stay cheap.
+  const lastProbeRef = useRef(0);
+  const handlePointerMove = useCallback(
+    (e) => {
+      if (!e.point || !onInspectPoint) return;
+      const now = performance.now();
+      if (now - lastProbeRef.current < 90) return;
+      lastProbeRef.current = now;
+      onInspectPoint(e.point.x, e.point.z);
     },
     [onInspectPoint]
   );
@@ -231,7 +250,7 @@ export default function SceneCanvas({
       }}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
     >
-      <color attach="background" args={['#0a0502']} />
+      <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
       <Stars
         radius={worldScale * 2.6}
@@ -245,7 +264,7 @@ export default function SceneCanvas({
 
       {terrain && <EdgeApron worldScale={worldScale} minH={terrain.minH} />}
 
-      <group onClick={handleClick}>
+      <group onClick={handleClick} onPointerMove={handlePointerMove}>
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
       </group>
 

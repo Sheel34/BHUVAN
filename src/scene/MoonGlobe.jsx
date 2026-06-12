@@ -151,7 +151,7 @@ function SiteMarker({ site, moonGroupRef, hovered, onHover, onSelect, flying }) 
       >
         <sphereGeometry args={[0.035, 16, 16]} />
         <meshBasicMaterial
-          color={hovered ? '#00ff88' : '#00ddcc'}
+          color={hovered ? '#ffffff' : '#93a4c4'}
           toneMapped={false}
         />
       </mesh>
@@ -165,7 +165,7 @@ function SiteMarker({ site, moonGroupRef, hovered, onHover, onSelect, flying }) 
               <span>RISK {site.risk}</span>
             </div>
             <div className="globe-site-card-cta">
-              CLICK TO ANALYZE {site.real ? '· REAL DEM AVAILABLE' : '· ANALOGUE TERRAIN'}
+              RUN TERRAIN SURVEY {site.real ? '· REAL DEM AVAILABLE' : '· ANALOGUE TERRAIN'}
             </div>
           </div>
         </Html>

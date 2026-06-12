@@ -28,6 +28,9 @@ export default function App() {
   const [sampleCatalog, setSampleCatalog] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [inspectedPoint, setInspectedPoint] = useState(null);
+  // Camera focus is deliberate (zone/POI selection); the hover probe must
+  // never move the camera.
+  const [focusPoint, setFocusPoint] = useState(null);
   const [backendMode, setBackendMode] = useState('connecting');
   const [debugMode, setDebugMode] = useState(false);
   const [report, setReport] = useState(null);
@@ -86,11 +89,11 @@ export default function App() {
     setReport(null);
     const topZone = result?.landingZones?.[0] || null;
     setSelectedZoneId(topZone?.id || null);
-    setInspectedPoint(
-      topZone
-        ? { x: topZone.x, y: topZone.y, z: topZone.z, metrics: inspectTerrainPoint(result, topZone.x, topZone.z) }
-        : null
-    );
+    const initialPoint = topZone
+      ? { x: topZone.x, y: topZone.y, z: topZone.z, metrics: inspectTerrainPoint(result, topZone.x, topZone.z) }
+      : null;
+    setInspectedPoint(initialPoint);
+    setFocusPoint(initialPoint);
     setViewMode(DEFAULT_VIEW);
     setPhase('workspace');
   }, []);
@@ -149,18 +152,22 @@ export default function App() {
     const zone = analysis?.landingZones?.find((candidate) => candidate.id === zoneId);
     if (!zone) return;
     setSelectedZoneId(zone.id);
-    setInspectedPoint({
+    const point = {
       x: zone.x,
       y: zone.y,
       z: zone.z,
       metrics: inspectTerrainPoint(analysis, zone.x, zone.z),
-    });
+    };
+    setInspectedPoint(point);
+    setFocusPoint(point);
   }, [analysis]);
 
   const handleFocusInterestRegion = useCallback((poi) => {
     if (!analysis) return;
     const metrics = inspectTerrainPoint(analysis, poi.x, poi.z);
-    setInspectedPoint({ x: poi.x, y: metrics.elevation, z: poi.z, metrics });
+    const point = { x: poi.x, y: metrics.elevation, z: poi.z, metrics };
+    setInspectedPoint(point);
+    setFocusPoint(point);
   }, [analysis]);
 
   const handleGenerateReport = useCallback(async (kind) => {
@@ -204,6 +211,7 @@ export default function App() {
         landingTarget={landingTarget}
         landingTargetHazard={landingTargetHazard}
         inspectedPoint={inspectedPoint}
+        focusPoint={focusPoint}
         interestRegions={analysis?.intelligence?.interest_regions || []}
         onInspectPoint={handleInspectPoint}
         debugMode={debugMode}

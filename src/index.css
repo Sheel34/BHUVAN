@@ -3,21 +3,23 @@
    ══════════════════════════════════════════════ */
 
 :root {
-  --bg-primary: #0a0a0f;
-  --bg-secondary: #111118;
-  --bg-panel: rgba(10, 12, 20, 0.85);
-  --text-primary: #e0e0e8;
-  --text-dim: #6a6a7a;
-  --accent-green: #00ff88;
-  --accent-orange: #ff8800;
-  --accent-red: #ff3344;
-  --accent-blue: #44aaff;
-  --accent-cyan: #00ddcc;
+  --bg-primary: #0a0b0e;
+  --bg-secondary: #101218;
+  --bg-panel: rgba(12, 14, 19, 0.85);
+  --text-primary: #e7e9ee;
+  --text-dim: #70768a;
+  /* Semantic data colors — calm, used ONLY for hazard/status meaning */
+  --accent-green: #34d399;
+  --accent-orange: #f59e0b;
+  --accent-red: #ef4444;
+  --accent-blue: #60a5fa;
+  /* Primary interface accent — desaturated steel, serious by default */
+  --accent-cyan: #93a4c4;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --font-display: 'Outfit', 'Inter', sans-serif;
-  --glow-green: 0 0 12px rgba(0, 255, 136, 0.4);
-  --glow-orange: 0 0 12px rgba(255, 136, 0, 0.4);
-  --glow-red: 0 0 12px rgba(255, 51, 68, 0.5);
+  --glow-green: 0 0 12px rgba(52, 211, 153, 0.25);
+  --glow-orange: 0 0 12px rgba(245, 158, 11, 0.25);
+  --glow-red: 0 0 12px rgba(239, 68, 68, 0.3);
 }
 
 *, *::before, *::after {
@@ -478,8 +480,8 @@ html, body, #root {
 
 .hud-phase-badge {
   padding: 2px 10px;
-  background: rgba(255, 136, 0, 0.15);
-  border: 1px solid rgba(255, 136, 0, 0.3);
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: 4px;
   color: var(--accent-orange);
   font-size: 0.65rem;
@@ -531,14 +533,14 @@ html, body, #root {
 
 .hud-layer-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .hud-layer-btn.active {
-  background: rgba(68, 170, 255, 0.15);
+  background: rgba(96, 165, 250, 0.15);
   border-color: var(--accent-blue);
   color: var(--accent-blue);
-  text-shadow: 0 0 8px rgba(68, 170, 255, 0.5);
+  text-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
 }
 
 .hud-debug-toggle.active {
-  background: rgba(0, 255, 136, 0.15);
+  background: rgba(52, 211, 153, 0.15);
   border-color: var(--accent-green);
   color: var(--accent-green);
 }
@@ -635,7 +637,7 @@ html, body, #root {
 .hud-zone-card:hover { background: rgba(255,255,255,0.06); }
 .hud-zone-card.active {
   border-color: var(--accent-green);
-  background: rgba(0, 255, 136, 0.08);
+  background: rgba(52, 211, 153, 0.08);
 }
 
 .zone-rank { font-size: 0.8rem; font-weight: 800; color: var(--text-dim); }
@@ -655,8 +657,8 @@ html, body, #root {
   gap: 8px;
 }
 
-.hud-status-message.loading { color: var(--accent-cyan); background: rgba(0, 221, 204, 0.1); }
-.hud-status-message.error { color: var(--accent-red); background: rgba(255, 51, 68, 0.1); }
+.hud-status-message.loading { color: var(--accent-cyan); background: rgba(147, 164, 196, 0.1); }
+.hud-status-message.error { color: var(--accent-red); background: rgba(239, 68, 68, 0.1); }
 
 .hud-spinner {
   width: 12px;
@@ -696,10 +698,10 @@ html, body, #root {
 }
 
 .hud-sys-btn.active {
-  background: rgba(0, 255, 136, 0.15);
+  background: rgba(52, 211, 153, 0.15);
   border-color: var(--accent-green);
   color: var(--accent-green);
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
+  box-shadow: 0 0 20px rgba(52, 211, 153, 0.2);
 }
 
 .hud-controls-hint {
@@ -740,8 +742,8 @@ html, body, #root {
   animation: warning-flash 0.6s ease-in-out infinite;
 }
 
-.hud-alert.danger { background: rgba(255, 51, 68, 0.8); color: #fff; }
-.hud-alert.warn { background: rgba(255, 136, 0, 0.8); color: #fff; }
+.hud-alert.danger { background: rgba(239, 68, 68, 0.8); color: #fff; }
+.hud-alert.warn { background: rgba(245, 158, 11, 0.8); color: #fff; }
 
 .hud-bottom-actions {
   position: absolute;
@@ -791,8 +793,8 @@ html, body, #root {
   letter-spacing: 0.2em;
 }
 
-.hud-mission-report.landed .report-header { background: rgba(0, 255, 136, 0.1); color: var(--accent-green); border-bottom: 1px solid rgba(0, 255, 136, 0.3); }
-.hud-mission-report.crashed .report-header { background: rgba(255, 51, 68, 0.1); color: var(--accent-red); border-bottom: 1px solid rgba(255, 51, 68, 0.3); }
+.hud-mission-report.landed .report-header { background: rgba(52, 211, 153, 0.1); color: var(--accent-green); border-bottom: 1px solid rgba(52, 211, 153, 0.3); }
+.hud-mission-report.crashed .report-header { background: rgba(239, 68, 68, 0.1); color: var(--accent-red); border-bottom: 1px solid rgba(239, 68, 68, 0.3); }
 
 .report-body { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
 .report-row { display: flex; justify-content: space-between; font-size: 0.75rem; }
@@ -808,13 +810,13 @@ html, body, #root {
   transform: translate(-50%, -50%);
   width: 60px;
   height: 60px;
-  border: 1px solid rgba(0, 255, 136, 0.3);
+  border: 1px solid rgba(52, 211, 153, 0.3);
   border-radius: 50%;
 }
 .hud-targeting-reticle::before, .hud-targeting-reticle::after {
   content: '';
   position: absolute;
-  background: rgba(0, 255, 136, 0.5);
+  background: rgba(52, 211, 153, 0.5);
 }
 .hud-targeting-reticle::before { top: 50%; left: -10px; right: -10px; height: 1px; }
 .hud-targeting-reticle::after { left: 50%; top: -10px; bottom: -10px; width: 1px; }
@@ -923,7 +925,7 @@ html, body, #root {
   font-size: 0.72rem;
   z-index: 60;
   color: var(--text-primary);
-  box-shadow: 0 0 20px rgba(0, 221, 204, 0.15);
+  box-shadow: 0 0 20px rgba(147, 164, 196, 0.15);
 }
 
 .debug-title {
@@ -932,7 +934,7 @@ html, body, #root {
   color: var(--accent-cyan);
   letter-spacing: 0.12em;
   margin-bottom: 8px;
-  border-bottom: 1px solid rgba(0, 221, 204, 0.3);
+  border-bottom: 1px solid rgba(147, 164, 196, 0.3);
   padding-bottom: 4px;
 }
 
@@ -1040,7 +1042,7 @@ html, body, #root {
   letter-spacing: 0.22em;
   color: var(--accent-cyan);
   padding: 6px 14px;
-  border: 1px solid rgba(0, 221, 204, 0.25);
+  border: 1px solid rgba(147, 164, 196, 0.25);
   border-radius: 999px;
   background: rgba(10, 12, 20, 0.55);
   backdrop-filter: blur(12px);
@@ -1108,8 +1110,8 @@ html, body, #root {
 }
 
 .globe-site-btn:hover:not(:disabled) {
-  border-color: rgba(0, 221, 204, 0.55);
-  background: rgba(0, 221, 204, 0.08);
+  border-color: rgba(147, 164, 196, 0.55);
+  background: rgba(147, 164, 196, 0.08);
   transform: translateX(-4px);
 }
 
@@ -1131,8 +1133,8 @@ html, body, #root {
   font-size: 11px;
   letter-spacing: 0.14em;
   color: var(--accent-green);
-  background: rgba(0, 255, 136, 0.06);
-  border: 1px solid rgba(0, 255, 136, 0.3);
+  background: rgba(52, 211, 153, 0.06);
+  border: 1px solid rgba(52, 211, 153, 0.3);
   border-radius: 10px;
   backdrop-filter: blur(14px);
   cursor: pointer;
@@ -1140,7 +1142,7 @@ html, body, #root {
 }
 
 .globe-workbench-btn:hover:not(:disabled) {
-  background: rgba(0, 255, 136, 0.14);
+  background: rgba(52, 211, 153, 0.14);
   box-shadow: var(--glow-green);
 }
 
@@ -1168,7 +1170,7 @@ html, body, #root {
 .globe-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(0, 221, 204, 0.25);
+  border: 2px solid rgba(147, 164, 196, 0.25);
   border-top-color: var(--accent-cyan);
   border-radius: 50%;
   animation: globe-spin 0.8s linear infinite;
@@ -1188,7 +1190,7 @@ html, body, #root {
   font-family: var(--font-display);
   color: var(--text-primary);
   background: rgba(10, 13, 24, 0.82);
-  border: 1px solid rgba(0, 221, 204, 0.35);
+  border: 1px solid rgba(147, 164, 196, 0.35);
   border-radius: 12px;
   backdrop-filter: blur(16px);
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.55);
@@ -1372,7 +1374,7 @@ html, body, #root {
   transition: color 0.2s ease, border-color 0.2s ease;
 }
 
-.hud-back-btn:hover { color: var(--accent-cyan); border-color: rgba(0, 221, 204, 0.4); }
+.hud-back-btn:hover { color: var(--accent-cyan); border-color: rgba(147, 164, 196, 0.4); }
 
 .hud-panel-toggle {
   position: absolute;
@@ -1415,7 +1417,7 @@ html, body, #root {
 
 .intel-hist-bar {
   flex: 1;
-  background: linear-gradient(to top, rgba(0, 221, 204, 0.85), rgba(68, 170, 255, 0.5));
+  background: linear-gradient(to top, rgba(147, 164, 196, 0.85), rgba(96, 165, 250, 0.5));
   border-radius: 1px 1px 0 0;
   min-height: 2px;
 }
@@ -1477,7 +1479,7 @@ html, body, #root {
   text-transform: uppercase;
   color: var(--accent-cyan);
   background: rgba(8, 10, 18, 0.75);
-  border: 1px solid rgba(0, 221, 204, 0.3);
+  border: 1px solid rgba(147, 164, 196, 0.3);
   border-radius: 6px;
   white-space: nowrap;
 }
@@ -1537,7 +1539,7 @@ html, body, #root {
   transition: background 0.2s ease;
 }
 
-.report-modal-actions button:hover { background: rgba(0, 221, 204, 0.12); }
+.report-modal-actions button:hover { background: rgba(147, 164, 196, 0.12); }
 
 .report-modal-body {
   padding: 20px 26px 28px;
@@ -1557,7 +1559,7 @@ html, body, #root {
   margin: 8px 0;
   padding: 8px 14px;
   border-left: 2px solid var(--accent-orange);
-  background: rgba(255, 136, 0, 0.06);
+  background: rgba(245, 158, 11, 0.06);
   font-size: 12px;
   color: var(--text-dim);
 }

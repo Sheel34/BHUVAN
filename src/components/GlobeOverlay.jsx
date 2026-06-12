@@ -23,12 +23,12 @@ export default function GlobeOverlay({
         </div>
         <h1 className="globe-title">BHUVAN</h1>
         <p className="globe-subtitle">
-          Fly the Moon. Pick a site. Get a landing-risk verdict.
+          Quantified terrain assessment for lunar surface operations.
         </p>
       </header>
 
       <nav className="globe-sites">
-        <div className="globe-sites-label">LANDING SITES</div>
+        <div className="globe-sites-label">SURVEY TARGETS</div>
         {MOON_SITES.map((site) => (
           <button
             key={site.id}
@@ -43,7 +43,7 @@ export default function GlobeOverlay({
           </button>
         ))}
         <button className="globe-workbench-btn" disabled={loading} onClick={onOpenWorkbench}>
-          OPEN ANALYSIS WORKBENCH →
+          OPEN WORKSPACE →
         </button>
       </nav>
 
@@ -57,7 +57,7 @@ export default function GlobeOverlay({
           <div className="globe-status error">{analysisError}</div>
         ) : (
           <div className="globe-status hint">
-            DRAG TO ROTATE · HOVER A MARKER · CLICK TO FLY IN
+            DRAG TO ROTATE · SELECT A TARGET TO RUN TERRAIN SURVEY
           </div>
         )}
         <div className="globe-source">

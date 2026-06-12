@@ -5,7 +5,7 @@ function downloadMarkdown(report) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ares-${report.kind}-${report.job_id?.slice(0, 8) || 'report'}.md`;
+  a.download = `bhuvan-${report.kind}-${report.job_id?.slice(0, 8) || 'report'}.md`;
   a.click();
   URL.revokeObjectURL(url);
 }
