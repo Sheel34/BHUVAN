@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from pipeline.artifacts import write_analysis_artifacts
 from pipeline.ingest import generate_sample, ingest_geotiff, ingest_image_bytes
+from pipeline.intelligence import build_intelligence
 from pipeline.landing_zones import rank_landing_zones
 from pipeline.schemas import (
     AnalysisLayers,
@@ -151,12 +152,17 @@ def build_payload(
     elevation_m = elevation_grid * height_scale_m
 
     notify("Computing hazard layers", 30)
-    layers = analyze_terrain(elevation_grid, cell_size_m=cell_size_m)
+    # analyze_terrain expects metres — passing the normalised [0,1] grid
+    # collapses every slope to ~0° and reports all terrain as safe.
+    layers = analyze_terrain(elevation_m, cell_size_m=cell_size_m)
 
     notify("Ranking landing zones", 60)
     landing_zones: list[LandingZone] = rank_landing_zones(
         elevation_m, layers, scale_m=world_scale_m
     )
+
+    notify("Deriving terrain intelligence", 75)
+    intelligence = build_intelligence(elevation_m, layers, scale_m=world_scale_m)
 
     safe_cells = float((layers["hazard"]["data"] < 0.35).sum())
     total_cells = float(layers["hazard"]["data"].size)
@@ -191,16 +197,25 @@ def build_payload(
         logger.warning("Artifact write failed for job %s: %s", job_id, exc)
         artifacts = None
 
-    return AnalysisPayload(
+    payload = AnalysisPayload(
         api_version=API_VERSION,
         job_id=job_id,
         metadata=terrain_meta,
         terrain=terrain_grid,
         layers=_layers_to_schema(layers),
         landing_zones=landing_zones,
+        intelligence=intelligence,
         artifacts=artifacts,
     )
 
+    try:
+        from workspace.store import save_analysis
+
+        save_analysis(payload)
+    except Exception as exc:  # noqa: BLE001 — persistence must never break analysis
+        logger.warning("Workspace save failed for job %s: %s", job_id, exc)
+
+    return payload
 
 app = FastAPI(
     title="ARES Terrain Intelligence API",
@@ -267,6 +282,58 @@ def get_samples():
         "api_version": API_VERSION,
         "samples": samples,
     }
+
+
+from workspace.store import init_db as _init_workspace_db  # noqa: E402
+
+_init_workspace_db()
+
+
+@app.get("/api/v1/workspace/analyses")
+def workspace_analyses():
+    """Persistent analysis history (newest first)."""
+    from workspace.store import list_analyses
+
+    return {"api_version": API_VERSION, "analyses": list_analyses()}
+
+
+@app.post("/api/v1/workspace/reports/{job_id}/{kind}")
+def workspace_generate_report(job_id: str, kind: str):
+    """Render + persist a report for a stored analysis."""
+    from workspace.reports import render_report
+    from workspace.store import get_analysis, save_report
+
+    record = get_analysis(job_id)
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorDetail(
+                code="ANALYSIS_NOT_FOUND",
+                message=f"No stored analysis with job_id '{job_id}'.",
+            ).model_dump(),
+        )
+    try:
+        markdown = render_report(record, kind)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=ErrorDetail(code="REPORT_FAILED", message=str(exc)).model_dump(),
+        )
+    report_id = save_report(job_id, kind, markdown)
+    return {
+        "api_version": API_VERSION,
+        "report_id": report_id,
+        "job_id": job_id,
+        "kind": kind,
+        "markdown": markdown,
+    }
+
+
+@app.get("/api/v1/workspace/reports/{job_id}")
+def workspace_list_reports(job_id: str):
+    from workspace.store import list_reports
+
+    return {"api_version": API_VERSION, "reports": list_reports(job_id)}
 
 
 @app.get("/api/v1/system/specs")

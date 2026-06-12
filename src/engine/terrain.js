@@ -160,6 +160,10 @@ export function normalizeAnalysisPayload(payload) {
 
     metadata: payload.metadata || {},
 
+    jobId: payload.jobId || null,
+
+    intelligence: payload.intelligence || null,
+
     terrain,
 
     layers: layersFromPayload(payload, terrain),

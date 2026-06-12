@@ -1357,3 +1357,258 @@ html, body, #root {
 }
 
 .sysmon-reopen:hover { color: var(--accent-cyan); }
+
+/* ── ARES workspace ──────────────────────────────────────────── */
+.hud-back-btn {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  background: rgba(12, 15, 26, 0.55);
+  border: 1px solid rgba(140, 160, 200, 0.16);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.hud-back-btn:hover { color: var(--accent-cyan); border-color: rgba(0, 221, 204, 0.4); }
+
+.hud-panel-toggle {
+  position: absolute;
+  top: 12px;
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(12, 15, 26, 0.7);
+  border: 1px solid rgba(140, 160, 200, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.hud-panel-toggle.left { right: -28px; }
+.hud-panel-toggle.right { left: -28px; }
+
+.hud-left-panel.closed, .hud-right-panel.closed {
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.hud-action-btn.poi span:first-child { text-transform: capitalize; }
+
+/* Intelligence widgets */
+.intel-hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 56px;
+  padding: 4px 2px 0;
+  background: rgba(140, 160, 200, 0.05);
+  border-radius: 6px;
+}
+
+.intel-hist-bar {
+  flex: 1;
+  background: linear-gradient(to top, rgba(0, 221, 204, 0.85), rgba(68, 170, 255, 0.5));
+  border-radius: 1px 1px 0 0;
+  min-height: 2px;
+}
+
+.intel-hist-range {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.intel-classes { display: flex; flex-direction: column; gap: 6px; }
+
+.intel-class-row {
+  display: grid;
+  grid-template-columns: 86px 1fr 42px;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.intel-class-label {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intel-class-track {
+  height: 5px;
+  background: rgba(140, 160, 200, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.intel-class-fill { height: 100%; border-radius: 3px; background: var(--accent-cyan); }
+.intel-class-fill.plains { background: var(--accent-green); }
+.intel-class-fill.slopes { background: #aacc44; }
+.intel-class-fill.steep { background: var(--accent-red); }
+.intel-class-fill.ridges { background: var(--accent-orange); }
+.intel-class-fill.depressions { background: var(--accent-blue); }
+.intel-class-fill.rough { background: #cc66ff; }
+
+.intel-class-pct {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* POI beacon label in 3D scene */
+.poi-label {
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-cyan);
+  background: rgba(8, 10, 18, 0.75);
+  border: 1px solid rgba(0, 221, 204, 0.3);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* ── Report modal ── */
+.report-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 3, 8, 0.7);
+  backdrop-filter: blur(6px);
+  animation: globe-fade-in 0.25s ease both;
+}
+
+.report-modal {
+  width: min(720px, 92vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(12, 14, 24, 0.96);
+  border: 1px solid rgba(140, 160, 200, 0.2);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+
+.report-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(140, 160, 200, 0.12);
+}
+
+.report-modal-kind {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--accent-cyan);
+}
+
+.report-modal-actions { display: flex; gap: 8px; }
+
+.report-modal-actions button {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-primary);
+  background: rgba(140, 160, 200, 0.08);
+  border: 1px solid rgba(140, 160, 200, 0.18);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.report-modal-actions button:hover { background: rgba(0, 221, 204, 0.12); }
+
+.report-modal-body {
+  padding: 20px 26px 28px;
+  overflow-y: auto;
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.report-modal-body h2 { font-size: 20px; margin: 8px 0 12px; }
+.report-modal-body h3 { font-size: 14px; margin: 18px 0 8px; color: var(--accent-cyan); letter-spacing: 0.04em; }
+.report-modal-body h4 { font-size: 12px; margin: 12px 0 6px; }
+.report-modal-body p { margin: 4px 0; }
+.report-modal-body li { margin-left: 18px; }
+.report-modal-body blockquote {
+  margin: 8px 0;
+  padding: 8px 14px;
+  border-left: 2px solid var(--accent-orange);
+  background: rgba(255, 136, 0, 0.06);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.report-modal-body hr { border: none; border-top: 1px solid rgba(140, 160, 200, 0.12); margin: 14px 0; }
+.report-modal-body code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(140, 160, 200, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 14px;
+  font-size: 12px;
+}
+
+.report-table th, .report-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(140, 160, 200, 0.1);
+}
+
+.report-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+/* ── Responsive: tablet & mobile ── */
+@media (max-width: 1100px) {
+  .hud-left-panel { width: 220px; }
+  .hud-right-panel { width: 250px; }
+}
+
+@media (max-width: 820px) {
+  .hud-top-center { display: none; }
+  .hud-left-panel, .hud-right-panel {
+    position: absolute;
+    top: 56px;
+    bottom: auto;
+    max-height: calc(100vh - 130px);
+    z-index: 30;
+  }
+  .hud-left-panel { left: 8px; }
+  .hud-right-panel { right: 8px; }
+  .sysmon { display: none; }
+  .sysmon-reopen { display: none; }
+  .report-modal { width: 96vw; max-height: 92vh; }
+  .hud-layer-selector { flex-wrap: wrap; justify-content: flex-end; }
+}

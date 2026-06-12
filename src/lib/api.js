@@ -93,6 +93,10 @@ function adaptPayload(raw) {
 
     api_version: raw.api_version,
 
+    jobId: raw.job_id || null,
+
+    intelligence: raw.intelligence || null,
+
     metadata: {
 
       terrainName: raw.metadata.terrain_name,
@@ -443,6 +447,30 @@ export async function fetchMoonTextures() {
     return null;
 
   }
+
+}
+
+
+
+export async function generateReport(jobId, kind) {
+
+  return requestJson(`${API_V1}/workspace/reports/${jobId}/${kind}`, {
+
+    method: 'POST',
+
+    timeoutMs: 30000,
+
+  });
+
+}
+
+
+
+export async function fetchAnalysisHistory() {
+
+  const payload = await requestJson(`${API_V1}/workspace/analyses`);
+
+  return payload.analyses || [];
 
 }
 

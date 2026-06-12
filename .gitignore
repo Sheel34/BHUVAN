@@ -34,8 +34,13 @@ tmp/
 report/
 report.zip
 data_cache/
+workspace.db
 
 # Graphify tool output
 graphify-out/
 .graphify_python
 .graphify_community_summary.txt
+# local test artifacts
+p_test.json
+report.json
+job_id.txt
