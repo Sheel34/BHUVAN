@@ -410,6 +410,133 @@ html, body, #root {
 }
 .scene-error-btn:hover { border-color: var(--accent-cyan); }
 
+/* ── Mission Ops console ─────────────────────────────────────────── */
+.ops-console {
+  position: absolute;
+  left: 24px;
+  bottom: 96px;
+  width: 320px;
+  max-height: calc(100vh - 220px);
+  display: flex;
+  flex-direction: column;
+  z-index: 18;
+  pointer-events: auto;
+  background: rgba(9, 11, 16, 0.86);
+  border: 1px solid rgba(147, 164, 196, 0.16);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  animation: globe-fade-in 0.8s ease both;
+}
+.ops-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(147, 164, 196, 0.12);
+}
+.ops-id { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.ops-title { font-size: 11px; font-weight: 700; letter-spacing: 0.2em; color: var(--text-primary); }
+.ops-craft { font-size: 8.5px; letter-spacing: 0.16em; color: var(--text-dim); }
+.ops-clock { text-align: right; }
+.ops-clock-label { display: block; font-size: 8px; letter-spacing: 0.2em; color: var(--text-dim); }
+.ops-clock-val { font-size: 13px; font-weight: 700; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
+.ops-close {
+  width: 20px; height: 20px; font-size: 10px;
+  color: var(--text-dim); background: rgba(147, 164, 196, 0.08);
+  border: 1px solid rgba(147, 164, 196, 0.16); border-radius: 5px; cursor: pointer;
+}
+.ops-close:hover { color: var(--accent-red); }
+
+.ops-statusbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-bottom: 1px solid rgba(147, 164, 196, 0.08);
+}
+.ops-mode {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.14em;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(147, 164, 196, 0.12); color: var(--text-primary);
+}
+.ops-mode.mode-driving { background: rgba(96, 165, 250, 0.18); color: var(--accent-blue); }
+.ops-mode.mode-science { background: rgba(180, 140, 255, 0.18); color: #c4a7ff; }
+.ops-mode.mode-charging { background: rgba(52, 211, 153, 0.18); color: var(--accent-green); }
+.ops-mode.mode-comm { background: rgba(110, 231, 255, 0.18); color: var(--accent-cyan); }
+.ops-link { display: flex; align-items: center; gap: 5px; font-size: 9px; letter-spacing: 0.1em; color: var(--text-dim); margin-left: auto; }
+.ops-link-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-red); }
+.ops-link.up .ops-link-dot { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+.ops-link.up { color: var(--accent-green); }
+.ops-sun { font-size: 9px; color: var(--accent-orange); letter-spacing: 0.08em; }
+
+.ops-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  padding: 10px 12px;
+}
+.ops-tile {
+  padding: 7px 8px 4px;
+  background: rgba(147, 164, 196, 0.05);
+  border: 1px solid rgba(147, 164, 196, 0.1);
+  border-left: 2px solid rgba(147, 164, 196, 0.35);
+  border-radius: 5px;
+}
+.ops-tile.warn { border-left-color: var(--accent-orange); }
+.ops-tile.critical { border-left-color: var(--accent-red); animation: ops-pulse 1s ease-in-out infinite; }
+@keyframes ops-pulse { 0%,100% { background: rgba(239,68,68,0.05);} 50% { background: rgba(239,68,68,0.16);} }
+.ops-tile-head { display: flex; justify-content: space-between; align-items: center; }
+.ops-tile-label { font-size: 8px; letter-spacing: 0.18em; color: var(--text-dim); }
+.ops-tile-state { font-size: 7.5px; font-weight: 700; letter-spacing: 0.1em; }
+.ops-tile.warn .ops-tile-state { color: var(--accent-orange); }
+.ops-tile.critical .ops-tile-state { color: var(--accent-red); }
+.ops-tile-value { font-size: 17px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.ops-tile-unit { font-size: 9px; font-weight: 400; color: var(--text-dim); margin-left: 2px; }
+.ops-spark { width: 100%; height: 18px; display: block; margin-top: 2px; }
+.ops-spark polyline { stroke: var(--accent-cyan); }
+.ops-spark.warn polyline { stroke: var(--accent-orange); }
+.ops-spark.critical polyline { stroke: var(--accent-red); }
+
+.ops-cmd-label { padding: 6px 12px 4px; font-size: 8px; letter-spacing: 0.22em; color: var(--text-dim); }
+.ops-cmd-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 8px; }
+.ops-cmd-btn {
+  flex: 1 1 30%; padding: 7px 4px; font-family: var(--font-mono);
+  font-size: 8.5px; letter-spacing: 0.06em; font-weight: 600;
+  color: var(--text-dim); background: rgba(147, 164, 196, 0.07);
+  border: 1px solid rgba(147, 164, 196, 0.16); border-radius: 5px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.ops-cmd-btn:hover { color: var(--text-primary); border-color: var(--accent-cyan); }
+.ops-cmd-btn.active { color: #06121c; background: var(--accent-cyan); border-color: var(--accent-cyan); }
+.ops-cmd-btn.danger { color: var(--accent-red); border-color: rgba(239, 68, 68, 0.3); }
+.ops-cmd-btn.danger:hover { background: rgba(239, 68, 68, 0.16); }
+
+.ops-log {
+  margin: 0 8px 10px; padding: 6px; overflow-y: auto; flex: 1; min-height: 70px; max-height: 150px;
+  background: rgba(0, 0, 0, 0.28); border-radius: 5px;
+}
+.ops-log-empty { font-size: 9px; color: var(--text-dim); padding: 6px; }
+.ops-log-row { display: flex; gap: 6px; font-size: 9px; line-height: 1.6; white-space: nowrap; }
+.ops-log-t { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ops-log-sev { font-weight: 700; width: 30px; flex-shrink: 0; }
+.ops-log-msg { color: #aeb6c6; overflow: hidden; text-overflow: ellipsis; }
+.sev-info .ops-log-sev { color: var(--accent-cyan); }
+.sev-cmd .ops-log-sev { color: var(--accent-blue); }
+.sev-warn .ops-log-sev { color: var(--accent-orange); }
+.sev-crit .ops-log-sev { color: var(--accent-red); }
+
+.ops-reopen {
+  position: absolute; left: 24px; bottom: 96px; z-index: 18; pointer-events: auto;
+  padding: 9px 14px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em;
+  color: var(--accent-cyan); background: rgba(9, 11, 16, 0.82);
+  border: 1px solid rgba(147, 164, 196, 0.22); border-radius: 8px; cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+.ops-reopen:hover { border-color: var(--accent-cyan); }
+
+@media (max-width: 820px) {
+  .ops-console { left: 8px; right: 8px; width: auto; bottom: 8px; max-height: 62vh; }
+  .ops-reopen { left: 8px; bottom: 8px; }
+}
+
 .simulation-root canvas {
   position: absolute !important;
   inset: 0;

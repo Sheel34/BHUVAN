@@ -5,6 +5,7 @@ import GlobeOverlay from './components/GlobeOverlay';
 import MissionDossier from './components/MissionDossier';
 import ReportModal from './components/ReportModal';
 import SystemMonitor from './components/SystemMonitor';
+import MissionOps from './components/MissionOps';
 import SceneErrorBoundary from './components/SceneErrorBoundary';
 import SceneCanvas from './scene/SceneCanvas';
 import MoonGlobe from './scene/MoonGlobe';
@@ -222,6 +223,7 @@ export default function App() {
           />
         </SceneErrorBoundary>
         <SystemMonitor clientGpu={clientGpu} />
+        <MissionOps />
         <GlobeOverlay
           analysisStatus={analysisStatus}
           analysisError={analysisError}
