@@ -3,7 +3,8 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, Html, OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { MOON_SITES, latLonToVec3 } from '../lib/moonSites';
+import { latLonToVec3 } from '../lib/moonSites';
+import { LUNAR_MISSIONS, MISSION_TYPE_STYLE } from '../lib/lunarMissions';
 import { createProceduralMoonTextures } from './proceduralMoon';
 
 const MOON_RADIUS = 2;
@@ -116,60 +117,67 @@ function Moon({ textures, groupRef, spinning }) {
   );
 }
 
-/* ── Site marker: pulsing ring + hover card ── */
-function SiteMarker({ site, moonGroupRef, hovered, onHover, onSelect, flying }) {
+/* ── Mission marker: a stalked pin at the real touchdown site, colored
+   by mission type. Hover shows a quick tag; click opens the dossier. ── */
+function MissionMarker({ mission, moonGroupRef, hovered, onHover, onSelect, flying }) {
   const markerRef = useRef();
-  const ringRef = useRef();
-  const basePos = useMemo(
-    () => latLonToVec3(site.lat, site.lon, MOON_RADIUS * 1.015),
-    [site]
-  );
+  const dotRef = useRef();
+  const style = MISSION_TYPE_STYLE[mission.type] || MISSION_TYPE_STYLE.lander;
+  const surfacePos = useMemo(() => latLonToVec3(mission.lat, mission.lon, MOON_RADIUS), [mission]);
+  const dir = useMemo(() => new THREE.Vector3(...surfacePos).normalize(), [surfacePos]);
+  const tip = useMemo(() => dir.clone().multiplyScalar(MOON_RADIUS * 1.07), [dir]);
+  // Orient the stalk to point radially outward from the globe.
+  const quat = useMemo(() => {
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    return q;
+  }, [dir]);
 
   useFrame(({ camera, clock }) => {
     if (!markerRef.current || !moonGroupRef.current) return;
-    // Fade markers on the far side of the globe
     const worldPos = markerRef.current.getWorldPosition(new THREE.Vector3());
-    const toCamera = camera.position.clone().sub(worldPos).normalize();
-    const outward = worldPos.clone().normalize();
-    const facing = outward.dot(toCamera);
-    const visible = facing > 0.12;
-    markerRef.current.visible = visible;
-
-    if (ringRef.current) {
-      const pulse = 1 + Math.sin(clock.elapsedTime * 2.4) * 0.12;
-      ringRef.current.scale.setScalar(hovered ? 1.5 : pulse);
+    const facing = worldPos.clone().normalize().dot(
+      camera.position.clone().sub(worldPos).normalize()
+    );
+    markerRef.current.visible = facing > 0.05;
+    if (dotRef.current) {
+      const pulse = 1 + Math.sin(clock.elapsedTime * 2.2 + mission.lat) * 0.15;
+      dotRef.current.scale.setScalar(hovered ? 1.8 : pulse);
     }
   });
 
   return (
-    <group ref={markerRef} position={basePos}>
-      <mesh
-        ref={ringRef}
-        onPointerOver={(e) => { e.stopPropagation(); if (!flying) onHover(site.id); }}
-        onPointerOut={(e) => { e.stopPropagation(); onHover(null); }}
-        onClick={(e) => { e.stopPropagation(); if (!flying) onSelect(site); }}
-      >
-        <sphereGeometry args={[0.035, 16, 16]} />
-        <meshBasicMaterial
-          color={hovered ? '#ffffff' : '#93a4c4'}
-          toneMapped={false}
-        />
+    <group ref={markerRef}>
+      {/* radial stalk */}
+      <mesh position={surfacePos} quaternion={quat}>
+        <cylinderGeometry args={[0.006, 0.006, MOON_RADIUS * 0.07, 6]} />
+        <meshBasicMaterial color={style.color} transparent opacity={0.7} toneMapped={false} />
       </mesh>
-      {hovered && !flying && (
-        <Html distanceFactor={5} position={[0.08, 0.1, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="globe-site-card">
-            <div className="globe-site-card-title">{site.name}</div>
-            <div className="globe-site-card-row">{site.blurb}</div>
-            <div className="globe-site-card-meta">
-              <span>ELEV {site.elevation}</span>
-              <span>RISK {site.risk}</span>
+      {/* head */}
+      <group position={tip.toArray()}>
+        {/* soft halo so the pin reads against bright regolith */}
+        <mesh>
+          <sphereGeometry args={[0.075, 16, 16]} />
+          <meshBasicMaterial color={style.color} transparent opacity={0.18} toneMapped={false} depthWrite={false} />
+        </mesh>
+        <mesh
+          ref={dotRef}
+          onPointerOver={(e) => { e.stopPropagation(); if (!flying) onHover(mission.id); }}
+          onPointerOut={(e) => { e.stopPropagation(); onHover(null); }}
+          onClick={(e) => { e.stopPropagation(); if (!flying) onSelect(mission); }}
+        >
+          <sphereGeometry args={[0.045, 16, 16]} />
+          <meshBasicMaterial color={hovered ? '#ffffff' : style.color} toneMapped={false} />
+        </mesh>
+        {hovered && !flying && (
+          <Html distanceFactor={6} position={[0.06, 0.06, 0]} style={{ pointerEvents: 'none' }}>
+            <div className="globe-mission-tag">
+              <span className="globe-mission-tag-name">{mission.mission}</span>
+              <span className="globe-mission-tag-meta">{mission.country} · {mission.date.slice(0, 4)}</span>
             </div>
-            <div className="globe-site-card-cta">
-              RUN TERRAIN SURVEY {site.real ? '· REAL DEM AVAILABLE' : '· ANALOGUE TERRAIN'}
-            </div>
-          </div>
-        </Html>
-      )}
+          </Html>
+        )}
+      </group>
     </group>
   );
 }
@@ -243,7 +251,7 @@ function Sun() {
   );
 }
 
-function GlobeScene({ textureUrls, flight, onFlightDone, onSelectSite, flying }) {
+function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, flying }) {
   const moonGroupRef = useRef();
   const controlsRef = useRef();
   const [hoveredSite, setHoveredSite] = useState(null);
@@ -255,16 +263,19 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectSite, flying })
     <>
       <Sun />
       <Stars radius={70} depth={40} count={6000} factor={3.2} saturation={0} fade speed={0.4} />
-      <Moon textures={textures} groupRef={moonGroupRef} spinning={!flying && !hoveredSite} />
+      {/* No idle spin: markers are pinned to fixed lat/lon in world space,
+          so the sphere must stay static or they'd drift off their sites.
+          Rotation is the user's job via OrbitControls. */}
+      <Moon textures={textures} groupRef={moonGroupRef} spinning={false} />
       <group>
-        {MOON_SITES.map((site) => (
-          <SiteMarker
-            key={site.id}
-            site={site}
+        {LUNAR_MISSIONS.map((mission) => (
+          <MissionMarker
+            key={mission.id}
+            mission={mission}
             moonGroupRef={moonGroupRef}
-            hovered={hoveredSite === site.id}
+            hovered={hoveredSite === mission.id}
             onHover={setHoveredSite}
-            onSelect={onSelectSite}
+            onSelect={onSelectMission}
             flying={flying}
           />
         ))}
@@ -295,7 +306,7 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectSite, flying })
  * upgrades to real LROC/LOLA textures when the backend serves them.
  * Clicking a site flies the camera in, then calls onSiteSelected(site).
  */
-export default function MoonGlobe({ textureUrls, onSiteSelected }) {
+export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected, flyToMission }) {
   const [flight, setFlight] = useState(null);
   const pendingSite = useRef(null);
 
@@ -305,6 +316,11 @@ export default function MoonGlobe({ textureUrls, onSiteSelected }) {
     pendingSite.current = site;
     setFlight({ cameraTarget: dir.multiplyScalar(MOON_RADIUS * 1.55) });
   }, []);
+
+  // App requests a fly-to-and-survey (from the dossier "survey" button).
+  useEffect(() => {
+    if (flyToMission) handleSelectSite(flyToMission);
+  }, [flyToMission, handleSelectSite]);
 
   const handleFlightDone = useCallback(() => {
     setFlight(null);
@@ -330,7 +346,7 @@ export default function MoonGlobe({ textureUrls, onSiteSelected }) {
           textureUrls={textureUrls}
           flight={flight}
           onFlightDone={handleFlightDone}
-          onSelectSite={handleSelectSite}
+          onSelectMission={onMissionSelect}
           flying={Boolean(flight)}
         />
       </Canvas>

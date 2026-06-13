@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import HUD from './components/HUD';
 import DebugOverlay from './components/DebugOverlay';
 import GlobeOverlay from './components/GlobeOverlay';
+import MissionDossier from './components/MissionDossier';
 import ReportModal from './components/ReportModal';
 import SystemMonitor from './components/SystemMonitor';
 import SceneCanvas from './scene/SceneCanvas';
@@ -35,6 +36,8 @@ export default function App() {
   const [debugMode, setDebugMode] = useState(false);
   const [report, setReport] = useState(null);
   const [reportBusy, setReportBusy] = useState(false);
+  const [selectedMission, setSelectedMission] = useState(null);
+  const [flyToMission, setFlyToMission] = useState(null);
 
   const selectedZone = useMemo(
     () => analysis?.landingZones?.find((zone) => zone.id === selectedZoneId) || null,
@@ -129,8 +132,16 @@ export default function App() {
   const handleGlobeSiteSelected = useCallback((site) => {
     resumeAudio();
     startWind();
+    setSelectedMission(null);
+    setFlyToMission(null);
     handleAnalyzeSample(site.sampleId);
   }, [handleAnalyzeSample]);
+
+  // Dossier "run survey" → fly the globe to the site, then analyze it.
+  const handleSurveyMission = useCallback((mission) => {
+    setSelectedMission(null);
+    setFlyToMission(mission);
+  }, []);
 
   const handleEnterWorkspace = useCallback(() => {
     resumeAudio();
@@ -190,14 +201,24 @@ export default function App() {
   if (phase === 'globe') {
     return (
       <div className="simulation-root">
-        <MoonGlobe textureUrls={moonTextures} onSiteSelected={handleGlobeSiteSelected} />
+        <MoonGlobe
+          textureUrls={moonTextures}
+          onMissionSelect={setSelectedMission}
+          onSiteSelected={handleGlobeSiteSelected}
+          flyToMission={flyToMission}
+        />
         <SystemMonitor />
         <GlobeOverlay
           analysisStatus={analysisStatus}
           analysisError={analysisError}
           textureSource={moonTextures ? 'real' : 'procedural'}
-          onSelectSite={handleGlobeSiteSelected}
+          onSelectMission={setSelectedMission}
           onOpenWorkbench={handleEnterWorkspace}
+        />
+        <MissionDossier
+          mission={selectedMission}
+          onClose={() => setSelectedMission(null)}
+          onSurvey={handleSurveyMission}
         />
       </div>
     );
