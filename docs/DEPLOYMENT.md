@@ -29,7 +29,8 @@ queue, so the app boots and works without it.
 1. New Project → import `Sheel34/BHUVAN` (root = repo root; `vercel.json`
    sets build = `npm run build`, output = `dist`, framework = vite).
 2. Environment Variable: `VITE_API_BASE` = the Railway backend URL
-   (must be set BEFORE the build — Vite inlines it).
+   (must be set BEFORE the build — Vite inlines it). **No trailing slash**
+   (e.g. `https://bhuvan-api-production-3c0b.up.railway.app`, not `...app/`).
 3. Deploy. Custom `bhuvan` domain → add it under Vercel → Domains (needs
    DNS you control); otherwise you get `bhuvan-*.vercel.app`.
 

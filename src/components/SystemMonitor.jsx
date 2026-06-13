@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
+import { API_BASE } from '../lib/api';
 const POLL_MS = 1000;
 
 // Calm by default — steel for normal load, warm only when genuinely high.
