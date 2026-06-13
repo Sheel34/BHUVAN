@@ -5,11 +5,24 @@ function formatNum(n, decimals = 1) {
   return typeof n === 'number' ? n.toFixed(decimals) : '--';
 }
 
-function MetricRow({ label, value, unit = '', accent = '' }) {
+// Color legend per data layer — gives the terrain coloring meaning
+// instead of an unexplained hue change.
+const LAYER_LEGENDS = {
+  elevation: { label: 'Elevation', gradient: 'linear-gradient(90deg,#5c5c61,#d2d2d8)', lo: 'low', hi: 'high' },
+  slope: { label: 'Slope', gradient: 'linear-gradient(90deg,#3a4be0,#e8553a)', lo: 'flat', hi: 'steep' },
+  roughness: { label: 'Roughness', gradient: 'linear-gradient(90deg,#33363b,#cf8a3a)', lo: 'smooth', hi: 'broken' },
+  hazard: { label: 'Hazard', gradient: 'linear-gradient(90deg,#34d399,#f59e0b,#ef4444)', lo: 'safe', hi: 'hazard' },
+  traversability: { label: 'Traversability', gradient: 'linear-gradient(90deg,#ef4444,#f59e0b,#34d399)', lo: 'poor', hi: 'good' },
+};
+
+function LayerLegend({ viewMode }) {
+  const legend = LAYER_LEGENDS[viewMode] || LAYER_LEGENDS.elevation;
   return (
-    <div className="hud-metric-row">
-      <span>{label}</span>
-      <span className={accent}>{value}{unit}</span>
+    <div className="hud-legend">
+      <span className="hud-legend-title">{legend.label}</span>
+      <span className="hud-legend-end">{legend.lo}</span>
+      <span className="hud-legend-bar" style={{ background: legend.gradient }} />
+      <span className="hud-legend-end">{legend.hi}</span>
     </div>
   );
 }
@@ -83,7 +96,6 @@ export default function HUD({
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
 
-  const inspectedMetrics = inspectedPoint?.metrics;
   const intel = analysis?.intelligence;
   const safeAreaPct = analysis?.metadata?.safeAreaPct ?? 0;
 
@@ -139,6 +151,8 @@ export default function HUD({
         </div>
       </div>
 
+      {analysis && <LayerLegend viewMode={viewMode} />}
+
       {/* ── LEFT RAIL: DATASETS ── */}
       <div className={`hud-left-panel ${leftOpen ? '' : 'closed'}`}>
         <button className="hud-panel-toggle left" onClick={() => setLeftOpen(!leftOpen)}>
@@ -152,13 +166,13 @@ export default function HUD({
                 {sampleCatalog.length > 0 ? sampleCatalog.map((sample) => (
                   <button
                     key={sample.id}
-                    className="hud-action-btn"
+                    className="hud-dataset-btn"
                     onClick={() => onAnalyzeSample(sample.id)}
                   >
-                    <span>{sample.label || sample.id}</span>
-                    <span className="hud-btn-tag">
-                      {sample.source?.includes('procedural') ? 'SYNTH' : 'REAL'}
-                    </span>
+                    <span className="hud-dataset-name">{sample.label || sample.id}</span>
+                    {sample.sublabel && (
+                      <span className="hud-dataset-sub">{sample.sublabel}</span>
+                    )}
                   </button>
                 )) : (
                   <div className="hud-empty-state">No datasets in registry.</div>
@@ -180,18 +194,6 @@ export default function HUD({
                 </span>
               </label>
             </div>
-
-            {inspectedMetrics && (
-              <div className="hud-section">
-                <div className="hud-section-label">SURFACE PROBE</div>
-                <div className="hud-metrics-box">
-                  <MetricRow label="Elevation" value={formatNum(inspectedMetrics.elevation)} unit=" m" />
-                  <MetricRow label="Slope" value={formatNum((inspectedMetrics.slope || 0) * 100)} unit="%" />
-                  <MetricRow label="Roughness" value={formatNum((inspectedMetrics.roughness || 0) * 100)} unit="%" />
-                  <MetricRow label="Hazard" value={formatNum((inspectedMetrics.hazard || 0) * 100)} unit="%" accent="accent-warn" />
-                </div>
-              </div>
-            )}
 
             {analysisStatus === 'loading' && (
               <div className="hud-status-message loading">

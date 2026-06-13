@@ -403,8 +403,8 @@ html, body, #root {
   align-items: center;
   gap: 16px;
   padding: 12px 14px;
-  background: rgba(5, 8, 18, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 12, 15, 0.82);
+  border: 1px solid rgba(147, 164, 196, 0.1);
   border-radius: 6px;
   backdrop-filter: blur(14px);
 }
@@ -460,8 +460,8 @@ html, body, #root {
   max-height: calc(100vh - 136px);
   overflow: auto;
   padding: 14px;
-  background: rgba(5, 8, 18, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(11, 12, 15, 0.82);
+  border: 1px solid rgba(147, 164, 196, 0.1);
   border-radius: 6px;
   backdrop-filter: blur(14px);
 }
@@ -536,16 +536,15 @@ html, body, #root {
 
 .hud-layer-btn:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .hud-layer-btn.active {
-  background: rgba(96, 165, 250, 0.15);
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  text-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+  background: rgba(147, 164, 196, 0.16);
+  border-color: rgba(147, 164, 196, 0.55);
+  color: #e7e9ee;
 }
 
 .hud-debug-toggle.active {
-  background: rgba(52, 211, 153, 0.15);
-  border-color: var(--accent-green);
-  color: var(--accent-green);
+  background: rgba(147, 164, 196, 0.14);
+  border-color: rgba(147, 164, 196, 0.45);
+  color: var(--text-primary);
 }
 
 .hud-panel-header {
@@ -600,6 +599,76 @@ html, body, #root {
   border-radius: 2px;
   color: var(--text-dim);
 }
+
+/* Dataset entry: clean primary name + subtle secondary descriptor */
+.hud-dataset-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(147, 164, 196, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+  text-align: left;
+}
+
+.hud-dataset-btn:hover {
+  background: rgba(147, 164, 196, 0.08);
+  border-color: rgba(147, 164, 196, 0.3);
+}
+
+.hud-dataset-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.hud-dataset-sub {
+  font-family: var(--font-mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* Layer legend — gives the active terrain coloring meaning */
+.hud-legend {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  background: rgba(11, 12, 15, 0.82);
+  border: 1px solid rgba(147, 164, 196, 0.1);
+  border-radius: 6px;
+  backdrop-filter: blur(14px);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  z-index: 6;
+}
+
+.hud-legend-title {
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.hud-legend-bar {
+  width: 140px;
+  height: 7px;
+  border-radius: 3px;
+}
+
+.hud-legend-end { text-transform: uppercase; }
 
 .hud-upload-field {
   display: block;
@@ -1458,13 +1527,15 @@ html, body, #root {
   overflow: hidden;
 }
 
-.intel-class-fill { height: 100%; border-radius: 3px; background: var(--accent-cyan); }
-.intel-class-fill.plains { background: var(--accent-green); }
-.intel-class-fill.slopes { background: #aacc44; }
-.intel-class-fill.steep { background: var(--accent-red); }
-.intel-class-fill.ridges { background: var(--accent-orange); }
-.intel-class-fill.depressions { background: var(--accent-blue); }
-.intel-class-fill.rough { background: #cc66ff; }
+/* Muted regolith-toned ramp — terrain reads as rock, not a candy chart.
+   Lightness encodes the class; hue stays in a tight warm-grey band. */
+.intel-class-fill { height: 100%; border-radius: 3px; background: #8b8f99; }
+.intel-class-fill.plains { background: #cfd2d8; }
+.intel-class-fill.slopes { background: #a7a59a; }
+.intel-class-fill.steep { background: #8a7d6e; }
+.intel-class-fill.ridges { background: #b9b1a3; }
+.intel-class-fill.depressions { background: #6e7480; }
+.intel-class-fill.rough { background: #7a7068; }
 
 .intel-class-pct {
   font-family: var(--font-mono);

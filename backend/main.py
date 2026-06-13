@@ -33,50 +33,58 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 API_VERSION = "1.1"
 SAMPLE_REGISTRY = {
     # Procedural analogues (always available, no download required)
-    "mars-jezero": {"label": "Mars Jezero Analogue", "source": "bundled-procedural", "body": "mars"},
+    "mars-jezero": {"label": "Jezero Crater", "sublabel": "Mars · analogue", "source": "bundled-procedural", "body": "mars"},
     "moon-south-pole": {
-        "label": "Lunar South Pole Analogue",
+        "label": "Lunar South Pole",
+        "sublabel": "Moon · analogue",
         "source": "bundled-procedural",
         "body": "moon",
     },
-    "mars-gale": {"label": "Mars Gale Crater Analogue", "source": "bundled-procedural", "body": "mars"},
+    "mars-gale": {"label": "Gale Crater", "sublabel": "Mars · analogue", "source": "bundled-procedural", "body": "mars"},
     "moon-shackleton": {
-        "label": "Shackleton Crater Rim Analogue",
+        "label": "Shackleton Crater",
+        "sublabel": "Moon · analogue",
         "source": "bundled-procedural",
         "body": "moon",
     },
     "moon-tycho": {
-        "label": "Tycho Crater Floor Analogue",
+        "label": "Tycho Crater",
+        "sublabel": "Moon · analogue",
         "source": "bundled-procedural",
         "body": "moon",
     },
     "moon-mare-tranquillitatis": {
-        "label": "Mare Tranquillitatis / Apollo 11 Analogue",
+        "label": "Mare Tranquillitatis",
+        "sublabel": "Apollo 11 region · analogue",
         "source": "bundled-procedural",
         "body": "moon",
     },
     # Real lunar LOLA DEMs (require download first — large files)
     "lola-south-pole-87s": {
-        "label": "🌑 Lunar South Pole / Shackleton (LOLA 5m Real DEM)",
+        "label": "Lunar South Pole",
+        "sublabel": "LOLA 5 m · real elevation",
         "source": "lola-dem",
         "body": "moon",
         "lola_id": "lola-south-pole-87s",
     },
     # Real HiRISE DTMs (require download first)
     "hirise-jezero-delta": {
-        "label": "🛰️ Jezero Crater Delta (HiRISE Real DTM)",
+        "label": "Jezero Delta",
+        "sublabel": "HiRISE · real elevation",
         "source": "hirise-dtm",
         "body": "mars",
         "hirise_id": "jezero-delta",
     },
     "hirise-gale-msl": {
-        "label": "🛰️ Gale Crater / Curiosity Landing (HiRISE Real DTM)",
+        "label": "Gale Crater",
+        "sublabel": "HiRISE · real elevation",
         "source": "hirise-dtm",
         "body": "mars",
         "hirise_id": "gale-msl-landing",
     },
     "hirise-nili-fossae": {
-        "label": "🛰️ Nili Fossae Carbonate (HiRISE Real DTM)",
+        "label": "Nili Fossae",
+        "sublabel": "HiRISE · real elevation",
         "source": "hirise-dtm",
         "body": "mars",
         "hirise_id": "nili-fossae",
@@ -262,6 +270,7 @@ def get_samples():
         entry = {
             "id": sid,
             "label": info["label"],
+            "sublabel": info.get("sublabel", ""),
             "source": info["source"],
             "body": info.get("body", "mars"),
         }
