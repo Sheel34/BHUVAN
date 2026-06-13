@@ -5,6 +5,40 @@ Split deploy: **static frontend** (Vercel/Netlify) + **FastAPI backend**
 
 ---
 
+## Chosen stack: Vercel (frontend) + Railway (backend + Redis)
+
+Config files are in the repo: `vercel.json` (root), `backend/railway.json`,
+`backend/Procfile`, `backend/.python-version`. Redis is OPTIONAL — the live
+`/api/v1/analyze` path is synchronous; Redis only powers the async `/jobs`
+queue, so the app boots and works without it.
+
+### Railway — backend
+1. New Project → Deploy from GitHub repo → pick `Sheel34/BHUVAN`.
+2. Service → Settings → **Root Directory = `backend`** (so it finds
+   `requirements.txt` + `railway.json` + `Procfile`).
+3. (Optional) Add the **Redis** plugin to the project.
+4. Service → Variables:
+   - `BHUVAN_CORS_ORIGINS` = your Vercel URL (e.g. `https://bhuvan.vercel.app`)
+   - `ARES_WORKSPACE_DB` = `/data/workspace.db`  *(add a Volume mounted at `/data`)*
+   - `ARES_MOON_CACHE` = `/data/moon`
+   - `ARES_REDIS_URL` = `${{Redis.REDIS_URL}}`  *(only if Redis plugin added)*
+5. Deploy → confirm `GET /health` → `{"status":"ok"}`.
+6. Warm globe textures once: `POST /api/v1/moon/textures/download`.
+
+### Vercel — frontend
+1. New Project → import `Sheel34/BHUVAN` (root = repo root; `vercel.json`
+   sets build = `npm run build`, output = `dist`, framework = vite).
+2. Environment Variable: `VITE_API_BASE` = the Railway backend URL
+   (must be set BEFORE the build — Vite inlines it).
+3. Deploy. Custom `bhuvan` domain → add it under Vercel → Domains (needs
+   DNS you control); otherwise you get `bhuvan-*.vercel.app`.
+
+### CLI alternative (if you give tokens)
+With `VERCEL_TOKEN` (+ `RAILWAY_TOKEN`) exported, these can run headless:
+`npx vercel deploy --prod --token $VERCEL_TOKEN` and `railway up` from `backend/`.
+
+---
+
 ## Architecture at deploy time
 
 ```
