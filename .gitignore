@@ -44,3 +44,6 @@ graphify-out/
 p_test.json
 report.json
 job_id.txt
+
+output/
+~$*

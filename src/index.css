@@ -428,10 +428,13 @@ html, body, #root {
 }
 
 .hud-logo {
-  color: var(--accent-orange);
   font-family: var(--font-display);
   font-weight: 900;
   letter-spacing: 0.14em;
+  background: linear-gradient(135deg, #f4f6ff 30%, #8fa3c8 80%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .hud-version {

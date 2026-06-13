@@ -240,6 +240,26 @@ export function marsColor(h, minH, maxH) {
 
 
 
+/* ── Realistic lunar regolith albedo (neutral grey, subtle elevation tint).
+
+   Kept mid-bright so the normal-mapped detail and directional sun do the
+
+   shading work — flat dark grey reads as plastic, this reads as rock. */
+
+export function lunarColor(h, minH, maxH) {
+
+  const t = (h - minH) / (maxH - minH + 0.001);
+
+  // Highlands brighten with elevation, mare floors stay darker.
+
+  const base = 0.42 + t * 0.30;
+
+  return [base, base * 0.99, base * 0.96];
+
+}
+
+
+
 export function analysisColor(viewMode, value, terrain, height) {
 
   if (viewMode === 'hazard') return hazardColor(value);
@@ -252,6 +272,8 @@ export function analysisColor(viewMode, value, terrain, height) {
 
   if (viewMode === 'traversability') return [0.18 + value * 0.18, 0.25 + value * 0.7, 0.25 + value * 0.2];
 
-  return marsColor(height, terrain.minH, terrain.maxH);
+  // 'elevation' / 'surface' / default → photoreal lunar regolith
+
+  return lunarColor(height, terrain.minH, terrain.maxH);
 
 }

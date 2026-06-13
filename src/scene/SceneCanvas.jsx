@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useCallback } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls, Html } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
+import { sampleHeight } from '../engine/terrain';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -131,14 +132,72 @@ function InterestBeacon({ poi, terrain }) {
   );
 }
 
-/* ── Surrounding apron: hides the terrain edge in fog ── */
+/* ── Surrounding lunar plain: the analyzed patch sits inside a much
+   larger ground disc so its edges read as "more moon", not a cliff into
+   space. Fog swallows the far rim. ── */
 function EdgeApron({ worldScale, minH }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.002, 0]}>
-      <circleGeometry args={[worldScale * 6, 64]} />
-      <meshStandardMaterial color="#101117" roughness={1} metalness={0} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.01, 0]} receiveShadow>
+      <circleGeometry args={[worldScale * 14, 96]} />
+      <meshStandardMaterial color="#5a5a5e" roughness={1} metalness={0} />
     </mesh>
   );
+}
+
+/* ── Space dome: a vast inward-facing shell so zooming out always shows
+   a star-flecked sky, never an empty black void. ── */
+function SpaceDome({ worldScale }) {
+  const tex = useMemo(() => {
+    const size = 1024;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    // Deep-space vertical gradient
+    const g = ctx.createLinearGradient(0, 0, 0, size);
+    g.addColorStop(0, '#06070b');
+    g.addColorStop(0.5, '#0a0c12');
+    g.addColorStop(1, '#070809');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    // Scattered stars
+    for (let i = 0; i < 1400; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 1.3;
+      const a = 0.3 + Math.random() * 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.mapping = THREE.EquirectangularReflectionMapping;
+    return t;
+  }, []);
+
+  return (
+    <mesh scale={[-1, 1, 1]}>
+      <sphereGeometry args={[worldScale * 6, 32, 32]} />
+      <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} />
+    </mesh>
+  );
+}
+
+/* ── Camera floor: hard guarantee the camera never dips below the
+   surface, whatever the orbit/pan/zoom math does. ── */
+function CameraFloor({ terrain }) {
+  const { camera, controls } = useThree();
+  useFrame(() => {
+    if (!terrain) return;
+    const ground = sampleHeight(terrain, camera.position.x, camera.position.z);
+    const clearance = terrain.scale * 0.015 + 2;
+    const minY = ground + clearance;
+    if (camera.position.y < minY) {
+      camera.position.y = minY;
+      if (controls?.update) controls.update();
+    }
+  });
+  return null;
 }
 
 /* ── Scene Lighting — shadow frustum sized to the terrain ── */
@@ -252,17 +311,19 @@ export default function SceneCanvas({
     >
       <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
+      <SpaceDome worldScale={worldScale} />
       <Stars
-        radius={worldScale * 2.6}
-        depth={worldScale * 0.5}
-        count={2400}
-        factor={worldScale / 60}
-        saturation={0.1}
+        radius={worldScale * 3.2}
+        depth={worldScale * 0.6}
+        count={3200}
+        factor={worldScale / 70}
+        saturation={0}
         fade
-        speed={0.25}
+        speed={0.2}
       />
 
       {terrain && <EdgeApron worldScale={worldScale} minH={terrain.minH} />}
+      {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}

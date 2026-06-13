@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { analysisColor } from '../engine/terrain';
+import { getRegolithMaps } from './lunarSurface';
+
+// Regolith detail repeats once per this many world-metres.
+const DETAIL_TILE_M = 60;
 
 const MIN_TILE_CELLS = 32;
 const TARGET_TILE_VERTS = 65;
@@ -60,7 +64,7 @@ function skirtNormal(edge) {
   return [0, 0, 1];
 }
 
-function addSkirtToGeometry({ positions, normals, indices, topIndices, edge, skirtDepth }) {
+function addSkirtToGeometry({ positions, normals, uvs, indices, topIndices, edge, skirtDepth }) {
   const skirtStart = positions.length / 3;
   const [nx, ny, nz] = skirtNormal(edge);
 
@@ -68,6 +72,8 @@ function addSkirtToGeometry({ positions, normals, indices, topIndices, edge, ski
     const p = topIndex * 3;
     positions.push(positions[p], positions[p + 1] - skirtDepth, positions[p + 2]);
     normals.push(nx, ny, nz);
+    // Skirts are hidden in fog/apron; reuse the top vertex UV.
+    uvs.push(uvs[topIndex * 2], uvs[topIndex * 2 + 1]);
   }
 
   for (let n = 0; n < topIndices.length - 1; n++) {
@@ -96,6 +102,7 @@ function buildBaseGeometry(terrain, tile) {
   const cols = jRange.length;
   const positions = [];
   const normals = [];
+  const uvs = [];
   const indices = [];
 
   for (let i = 0; i < rows; i++) {
@@ -109,6 +116,9 @@ function buildBaseGeometry(terrain, tile) {
       const [nx, ny, nz] = terrainNormal(terrain, dataI, dataJ);
       positions.push(wx, height, wz);
       normals.push(nx, ny, nz);
+      // Planar world-space UV so the regolith detail map tiles seamlessly
+      // across tile boundaries regardless of LOD.
+      uvs.push(wx / DETAIL_TILE_M, wz / DETAIL_TILE_M);
     }
   }
 
@@ -137,21 +147,22 @@ function buildBaseGeometry(terrain, tile) {
   }
 
   if (tile.skirts?.west) {
-    addSkirtToGeometry({ positions, normals, indices, topIndices: west, edge: 'west', skirtDepth });
+    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: west, edge: 'west', skirtDepth });
   }
   if (tile.skirts?.east) {
-    addSkirtToGeometry({ positions, normals, indices, topIndices: east, edge: 'east', skirtDepth });
+    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: east, edge: 'east', skirtDepth });
   }
   if (tile.skirts?.north) {
-    addSkirtToGeometry({ positions, normals, indices, topIndices: north, edge: 'north', skirtDepth });
+    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: north, edge: 'north', skirtDepth });
   }
   if (tile.skirts?.south) {
-    addSkirtToGeometry({ positions, normals, indices, topIndices: south, edge: 'south', skirtDepth });
+    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: south, edge: 'south', skirtDepth });
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeBoundingSphere();
   geometry.computeBoundingBox();
@@ -361,15 +372,28 @@ export default React.memo(function TerrainChunked({ terrain, layers, viewMode })
   const [visibleTiles, setVisibleTiles] = useState(() => selectVisibleTiles(terrain, camera));
 
   const material = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
+    () => {
+      const { normal, roughness } = getRegolithMaps();
+      return new THREE.MeshStandardMaterial({
         vertexColors: true,
-        roughness: 0.92,
-        metalness: 0.05,
+        roughnessMap: roughness,
+        roughness: 1.0,
+        metalness: 0.0,
+        normalMap: normal,
+        normalScale: new THREE.Vector2(0.7, 0.7),
         flatShading: false,
-      }),
+      });
+    },
     [],
   );
+
+  // Data-viz layers should read as clean color, not gritty rock; the
+  // regolith normal detail only belongs on the photoreal surface view.
+  useEffect(() => {
+    const photoreal = viewMode === 'elevation' || viewMode === 'surface';
+    material.normalScale.set(photoreal ? 0.7 : 0.18, photoreal ? 0.7 : 0.18);
+    material.needsUpdate = true;
+  }, [material, viewMode]);
 
   const updateVisibleTiles = useCallback(
     (force = false) => {
