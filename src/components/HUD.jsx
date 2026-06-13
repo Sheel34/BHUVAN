@@ -1,54 +1,78 @@
-import React from 'react';
-import { CONSTANTS } from '../engine/physics';
+import React, { useState } from 'react';
+import { isMuted, toggleMute, uiConfirm, uiTick } from '../engine/audio';
 
 function formatNum(n, decimals = 1) {
   return typeof n === 'number' ? n.toFixed(decimals) : '--';
 }
 
-function Bar({ value, max, color, label, unit }) {
-  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+// Color legend per data layer — gives the terrain coloring meaning
+// instead of an unexplained hue change.
+const LAYER_LEGENDS = {
+  elevation: { label: 'Elevation', gradient: 'linear-gradient(90deg,#5c5c61,#d2d2d8)', lo: 'low', hi: 'high' },
+  slope: { label: 'Slope', gradient: 'linear-gradient(90deg,#3a4be0,#e8553a)', lo: 'flat', hi: 'steep' },
+  roughness: { label: 'Roughness', gradient: 'linear-gradient(90deg,#33363b,#cf8a3a)', lo: 'smooth', hi: 'broken' },
+  hazard: { label: 'Hazard', gradient: 'linear-gradient(90deg,#34d399,#f59e0b,#ef4444)', lo: 'safe', hi: 'hazard' },
+  traversability: { label: 'Traversability', gradient: 'linear-gradient(90deg,#ef4444,#f59e0b,#34d399)', lo: 'poor', hi: 'good' },
+};
+
+function LayerLegend({ viewMode }) {
+  const legend = LAYER_LEGENDS[viewMode] || LAYER_LEGENDS.elevation;
   return (
-    <div className="hud-bar">
-      <div className="hud-bar-label">
-        <span>{label}</span>
-        <span>{formatNum(value, 1)} {unit}</span>
-      </div>
-      <div className="hud-bar-track">
+    <div className="hud-legend">
+      <span className="hud-legend-title">{legend.label}</span>
+      <span className="hud-legend-end">{legend.lo}</span>
+      <span className="hud-legend-bar" style={{ background: legend.gradient }} />
+      <span className="hud-legend-end">{legend.hi}</span>
+    </div>
+  );
+}
+
+function ElevationHistogram({ stats }) {
+  if (!stats?.histogram?.length) return null;
+  const max = Math.max(...stats.histogram, 1);
+  return (
+    <div className="intel-hist" title="Elevation distribution">
+      {stats.histogram.map((count, i) => (
         <div
-          className="hud-bar-fill"
-          style={{ width: `${pct}%`, background: color }}
+          key={i}
+          className="intel-hist-bar"
+          style={{ height: `${Math.max(3, (count / max) * 100)}%` }}
         />
-      </div>
+      ))}
     </div>
   );
 }
 
-function Gauge({ label, value, unit, warn, danger, inverse = false }) {
-  let cls = 'hud-gauge';
-  const dangerTriggered = inverse ? value <= danger : value >= danger;
-  const warnTriggered = inverse ? value <= warn : value >= warn;
-  if (danger != null && typeof value === 'number' && dangerTriggered) cls += ' danger';
-  else if (warn != null && typeof value === 'number' && warnTriggered) cls += ' warn';
+function ClassificationBars({ classification }) {
+  if (!classification?.classes) return null;
   return (
-    <div className={cls}>
-      <span className="hud-gauge-value">{formatNum(value, 1)}</span>
-      <span className="hud-gauge-unit">{unit}</span>
-      <span className="hud-gauge-label">{label}</span>
+    <div className="intel-classes">
+      {classification.classes
+        .filter((c) => c.coverage_pct > 0)
+        .map((c) => (
+          <div key={c.key} className="intel-class-row" title={c.description}>
+            <span className="intel-class-label">{c.label}</span>
+            <div className="intel-class-track">
+              <div
+                className={`intel-class-fill ${c.key}`}
+                style={{ width: `${c.coverage_pct}%` }}
+              />
+            </div>
+            <span className="intel-class-pct">{c.coverage_pct.toFixed(1)}%</span>
+          </div>
+        ))}
     </div>
   );
 }
 
-function MetricRow({ label, value, unit = '', accent = '' }) {
-  return (
-    <div className="hud-metric-row">
-      <span>{label}</span>
-      <span className={accent}>{value}{unit}</span>
-    </div>
-  );
-}
+const REPORT_KINDS = [
+  ['summary', 'Terrain Summary'],
+  ['surface', 'Surface Analysis'],
+  ['risk', 'Risk Assessment'],
+  ['geology', 'Geological Overview'],
+];
 
 export default function HUD({
-  phase,
   backendMode,
   analysis,
   analysisStatus,
@@ -56,248 +80,219 @@ export default function HUD({
   sampleCatalog,
   selectedZoneId,
   inspectedPoint,
-  missionReport,
-  landerState,
   viewMode,
+  debugMode,
+  reportBusy,
   onViewModeChange,
   onAnalyzeSample,
   onUpload,
   onSelectZone,
-  onInitDescent,
-  onReturnToInspection,
-  onToggleAutopilot,
-  autopilot,
+  onFocusInterestRegion,
+  onGenerateReport,
+  onToggleDebug,
+  onBackToGlobe,
 }) {
-  const s = landerState || {};
-  const altitude = s.y != null ? Math.max(0, s.y - 1.5) : 0;
-  const descentRate = s.vy != null ? -s.vy : 0;
-  const lateralSpeed = s.vx != null ? Math.sqrt(s.vx ** 2 + s.vz ** 2) : 0;
-  const isLow = altitude < 30;
-  const isCritical = altitude < 10;
-  const inspectedMetrics = inspectedPoint?.metrics;
-  const selectedZone = analysis?.landingZones?.find((zone) => zone.id === selectedZoneId);
-  const statusLabel = phase === 'inspect3d' ? 'INSPECT' : phase.toUpperCase();
+  const [audioMuted, setAudioMuted] = useState(isMuted());
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+
+  const intel = analysis?.intelligence;
   const safeAreaPct = analysis?.metadata?.safeAreaPct ?? 0;
 
   return (
     <div className="hud-overlay">
+      {/* ── TOP BAR ── */}
       <div className="hud-top">
         <div className="hud-top-left">
-          <span className="hud-logo">◆ BHUVAN</span>
-          <span className="hud-phase">{statusLabel}</span>
+          <button className="hud-back-btn" onClick={onBackToGlobe} title="Back to Moon globe">
+            ◂ GLOBE
+          </button>
+          <div className="hud-branding">
+            <span className="hud-logo">BHUVAN</span>
+            <span className="hud-version">PLANETARY INTELLIGENCE</span>
+          </div>
+          {backendMode !== 'online' && (
+            <div className={`hud-conn-indicator ${backendMode}`}>
+              <span className="conn-dot" />
+              {backendMode === 'error' ? 'OFFLINE' : '…'}
+            </div>
+          )}
         </div>
+
         <div className="hud-top-center">
-          <span className="hud-mission-time">
-            {analysis?.metadata?.terrainName || 'Awaiting Terrain Analysis'}
-          </span>
+          <div className="hud-terrain-name">
+            {analysis?.metadata?.terrainName || 'SELECT A DATASET'}
+          </div>
         </div>
+
         <div className="hud-top-right">
-          <div className="hud-view-modes">
-            {['elevation', 'slope', 'roughness', 'hazard', 'traversability', 'shadow'].map((m) => (
+          <div className="hud-layer-selector">
+            {['elevation', 'slope', 'roughness', 'hazard', 'traversability'].map((m) => (
               <button
                 key={m}
-                id={`view-mode-${m}`}
-                className={`hud-view-btn ${viewMode === m ? 'active' : ''}`}
-                onClick={() => onViewModeChange(m)}
+                className={`hud-layer-btn ${viewMode === m ? 'active' : ''}`}
+                onClick={() => { uiTick(); onViewModeChange(m); }}
               >
-                {m.toUpperCase()}
+                {m.substring(0, 4).toUpperCase()}
               </button>
             ))}
+            <button
+              className={`hud-debug-toggle ${debugMode ? 'active' : ''}`}
+              onClick={() => { uiTick(); onToggleDebug(); }}
+            >
+              DBG
+            </button>
+            <button
+              className={`hud-debug-toggle ${audioMuted ? '' : 'active'}`}
+              title={audioMuted ? 'Unmute audio' : 'Mute audio'}
+              onClick={() => setAudioMuted(toggleMute())}
+            >
+              {audioMuted ? 'MUTE' : 'AUD'}
+            </button>
           </div>
         </div>
       </div>
 
-      {(phase === 'analyze' || phase === 'inspect3d') && (
-        <>
-          <div className="hud-left-panel">
-            <div className="hud-panel-title">ANALYSIS WORKBENCH</div>
-            <div className="hud-workbench-block">
-              <div className="hud-status-chip">
-                BACKEND: {backendMode === 'online' ? 'FASTAPI ONLINE' : backendMode === 'fallback' ? 'FRONTEND FALLBACK' : 'CONNECTING'}
-              </div>
-              <p className="hud-panel-copy">
-                Run terrain analysis first, then inspect the evidence before committing to a landing zone.
-              </p>
-            </div>
+      {analysis && <LayerLegend viewMode={viewMode} />}
 
-            <div className="hud-workbench-block">
-              <div className="hud-mini-title">SAMPLE TERRAINS</div>
-              <div className="hud-zone-list">
-                {sampleCatalog.map((sample) => (
+      {/* ── LEFT RAIL: DATASETS ── */}
+      <div className={`hud-left-panel ${leftOpen ? '' : 'closed'}`}>
+        <button className="hud-panel-toggle left" onClick={() => setLeftOpen(!leftOpen)}>
+          {leftOpen ? '◂' : '▸'}
+        </button>
+        {leftOpen && (
+          <>
+            <div className="hud-panel-header">DATASETS</div>
+            <div className="hud-section">
+              <div className="hud-action-list">
+                {sampleCatalog.length > 0 ? sampleCatalog.map((sample) => (
                   <button
                     key={sample.id}
-                    className="hud-zone-btn"
+                    className="hud-dataset-btn"
                     onClick={() => onAnalyzeSample(sample.id)}
                   >
-                    <span>{sample.label || sample.id}</span>
-                    <span>{sample.source === 'frontend-fallback' ? 'DEMO' : 'BUNDLE'}</span>
+                    <span className="hud-dataset-name">{sample.label || sample.id}</span>
+                    {sample.sublabel && (
+                      <span className="hud-dataset-sub">{sample.sublabel}</span>
+                    )}
                   </button>
-                ))}
+                )) : (
+                  <div className="hud-empty-state">No datasets in registry.</div>
+                )}
               </div>
             </div>
 
-            <div className="hud-workbench-block">
-              <div className="hud-mini-title">UPLOAD HEIGHTMAP / DEM IMAGE</div>
-              <label className="hud-upload-btn">
-                <span>{backendMode === 'online' ? 'SELECT FILE' : 'UPLOAD REQUIRES BACKEND'}</span>
+            <div className="hud-section">
+              <div className="hud-section-label">UPLOAD</div>
+              <label className="hud-upload-field">
                 <input
                   type="file"
                   accept="image/*"
                   disabled={backendMode !== 'online'}
                   onChange={(e) => onUpload(e.target.files?.[0])}
                 />
+                <span className="hud-upload-label">
+                  {backendMode === 'online' ? 'UPLOAD TERRAIN DATA' : 'REQUIRES BACKEND'}
+                </span>
               </label>
             </div>
 
-            {phase === 'inspect3d' && (
-              <div className="hud-workbench-block">
-                <div className="hud-mini-title">POINT INSPECTION</div>
-                {inspectedMetrics ? (
-                  <>
-                    <MetricRow label="Elevation" value={formatNum(inspectedMetrics.elevation)} unit=" m" />
-                    <MetricRow label="Slope risk" value={formatNum((inspectedMetrics.slope || 0) * 100)} unit="%" />
-                    <MetricRow label="Roughness" value={formatNum((inspectedMetrics.roughness || 0) * 100)} unit="%" />
-                    <MetricRow label="Shadow proxy" value={formatNum((inspectedMetrics.shadow || 0) * 100)} unit="%" />
-                    <MetricRow label="Hazard score" value={formatNum((inspectedMetrics.hazard || 0) * 100)} unit="%" accent="accent-warn" />
-                    <MetricRow label="Traversability" value={formatNum((inspectedMetrics.traversability || 0) * 100)} unit="%" accent="accent-good" />
-                  </>
-                ) : (
-                  <p className="hud-panel-copy">Inspect a point on the terrain to see the local evidence.</p>
-                )}
+            {analysisStatus === 'loading' && (
+              <div className="hud-status-message loading">
+                <div className="hud-spinner" />
+                ANALYZING TERRAIN…
+              </div>
+            )}
+            {analysisError && <div className="hud-status-message error">{analysisError}</div>}
+          </>
+        )}
+      </div>
+
+      {/* ── RIGHT PANEL: INTELLIGENCE ── */}
+      <div className={`hud-right-panel ${rightOpen ? '' : 'closed'}`}>
+        <button className="hud-panel-toggle right" onClick={() => setRightOpen(!rightOpen)}>
+          {rightOpen ? '▸' : '◂'}
+        </button>
+        {rightOpen && (analysis ? (
+          <>
+            <div className="hud-panel-header">INTELLIGENCE</div>
+
+            {intel && (
+              <div className="hud-section">
+                <div className="hud-section-label">ELEVATION · {formatNum(intel.elevation.relief_m, 0)} m RELIEF</div>
+                <ElevationHistogram stats={intel.elevation} />
+                <div className="intel-hist-range">
+                  <span>{formatNum(intel.elevation.min_m, 0)} m</span>
+                  <span>median {formatNum(intel.elevation.median_m, 0)} m</span>
+                  <span>{formatNum(intel.elevation.max_m, 0)} m</span>
+                </div>
               </div>
             )}
 
-            {analysisStatus === 'loading' && <div className="hud-loading">Running slope, roughness, shadow, and landing-zone analysis...</div>}
-            {analysisError && <div className="hud-error">{analysisError}</div>}
-            {analysis?.metadata?.disclaimer && <div className="hud-disclaimer">{analysis.metadata.disclaimer}</div>}
-          </div>
+            {intel && (
+              <div className="hud-section">
+                <div className="hud-section-label">SURFACE CLASSIFICATION</div>
+                <ClassificationBars classification={intel.classification} />
+              </div>
+            )}
 
-          <div className="hud-right-panel hud-analysis-panel">
-            <div className="hud-panel-title">LANDING ZONES</div>
-            {analysis ? (
-              <>
-                <MetricRow label="Safe area" value={formatNum(safeAreaPct)} unit="%" accent="accent-good" />
-                <MetricRow label="Grid size" value={analysis.metadata?.gridSize || '--'} />
-                <MetricRow label="Source" value={analysis.metadata?.source || '--'} />
+            <div className="hud-section">
+              <div className="hud-section-label">SAFE ZONES · {formatNum(safeAreaPct)}% OF AREA</div>
+              <div className="hud-zone-stack">
+                {(analysis.landingZones || []).slice(0, 3).map((zone, index) => (
+                  <button
+                    key={zone.id}
+                    className={`hud-zone-card ${selectedZoneId === zone.id ? 'active' : ''}`}
+                    onClick={() => { uiConfirm(); onSelectZone(zone.id); }}
+                  >
+                    <div className="zone-rank">#{index + 1}</div>
+                    <div className="zone-info">
+                      <span className="zone-class">{zone.classification.toUpperCase()}</span>
+                      <span className="zone-score">{formatNum(zone.score)}%</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                <div className="hud-mini-title hud-spaced">TOP CANDIDATES</div>
-                <div className="hud-zone-list">
-                  {(analysis.landingZones || []).map((zone, index) => (
+            {intel?.interest_regions?.length > 0 && (
+              <div className="hud-section">
+                <div className="hud-section-label">POINTS OF INTEREST</div>
+                <div className="hud-action-list">
+                  {intel.interest_regions.map((poi) => (
                     <button
-                      key={zone.id}
-                      className={`hud-zone-btn ${selectedZoneId === zone.id ? 'active' : ''}`}
-                      onClick={() => onSelectZone(zone.id)}
+                      key={poi.id}
+                      className="hud-action-btn poi"
+                      onClick={() => { uiTick(); onFocusInterestRegion(poi); }}
                     >
-                      <span>#{index + 1} {zone.classification.toUpperCase()}</span>
-                      <span>{formatNum(zone.score)}%</span>
+                      <span>{poi.kind}</span>
+                      <span className="hud-btn-tag">{formatNum(poi.elevation_m, 0)}m</span>
                     </button>
                   ))}
                 </div>
-
-                {phase === 'inspect3d' && selectedZone && (
-                  <div className="hud-workbench-block">
-                    <div className="hud-mini-title hud-spaced">SELECTED CANDIDATE</div>
-                    <MetricRow label="Zone score" value={formatNum(selectedZone.score)} unit="%" accent="accent-good" />
-                    <MetricRow label="Classification" value={selectedZone.classification.toUpperCase()} />
-                    <MetricRow label="Slope contribution" value={selectedZone.components?.slope ?? '--'} unit="%" />
-                    <MetricRow label="Roughness contribution" value={selectedZone.components?.roughness ?? '--'} unit="%" />
-                    <MetricRow label="Curvature contribution" value={selectedZone.components?.curvature ?? '--'} unit="%" />
-                    <MetricRow label="Shadow contribution" value={selectedZone.components?.shadow ?? '--'} unit="%" />
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="hud-panel-copy">No terrain analyzed yet.</p>
-            )}
-          </div>
-        </>
-      )}
-
-      {phase === 'inspect3d' && (
-        <div className="hud-orbital-prompt">
-          <p>CLICK TERRAIN TO INSPECT CELL METRICS</p>
-          <p className="hud-sub">Orbit, pan, zoom, compare layers, then commit to a candidate zone.</p>
-        </div>
-      )}
-
-      {(phase === 'descent' || phase === 'report') && (
-        <>
-          <div className="hud-left-panel">
-            <div className="hud-panel-title">DESCENT TELEMETRY</div>
-            <Gauge label="ALTITUDE" value={altitude} unit="m" warn={30} danger={10} inverse />
-            <Gauge label="V/S" value={descentRate} unit="m/s" warn={5} danger={8} />
-            <Gauge label="H/S" value={lateralSpeed} unit="m/s" warn={3} danger={5} />
-            <Bar label="FUEL" value={s.fuel || 0} max={CONSTANTS.INITIAL_FUEL} color="#00ff88" unit="kg" />
-            <Bar label="THROTTLE" value={(s.throttle || 0) * 100} max={100} color="#ff8800" unit="%" />
-            <MetricRow label="Touchdown hazard" value={formatNum((s.touchdownRisk || 0) * 100)} unit="%" />
-          </div>
-
-          <div className="hud-right-panel">
-            <div className="hud-panel-title">FLIGHT CONTROLS</div>
-            <button
-              className={`hud-control-btn ${autopilot ? 'active' : ''}`}
-              onClick={onToggleAutopilot}
-              id="toggle-autopilot"
-            >
-              {autopilot ? 'AUTO GUIDANCE' : 'MANUAL GUIDANCE'}
-            </button>
-            {!autopilot && (
-              <div className="hud-controls-help">
-                <p><kbd>W</kbd> Thrust Up</p>
-                <p><kbd>S</kbd> Thrust Down</p>
-                <p><kbd>A</kbd><kbd>D</kbd> Lateral</p>
-                <p><kbd>Q</kbd><kbd>E</kbd> Strafe</p>
               </div>
             )}
-          </div>
 
-          {phase === 'descent' && isCritical && (
-            <div className="hud-warning critical">⚠ ALTITUDE CRITICAL</div>
-          )}
-          {phase === 'descent' && isLow && !isCritical && (
-            <div className="hud-warning low">⚠ LOW ALTITUDE</div>
-          )}
-          {phase === 'descent' && (s.fuel || 0) < 15 && (
-            <div className="hud-warning fuel">⚠ FUEL LOW</div>
-          )}
-        </>
-      )}
-
-      {phase === 'inspect3d' && selectedZone && (
-        <div className="hud-bottom-center">
-          <button className="hud-descent-btn" onClick={onInitDescent} id="initiate-descent-btn">
-            INITIATE VALIDATION DESCENT
-          </button>
-        </div>
-      )}
-
-      {phase === 'report' && missionReport && (
-        <div className={`hud-result ${missionReport.outcome === 'landed' ? 'landed' : 'crashed'}`}>
-          <h2>{missionReport.outcome === 'landed' ? 'LANDING REPORT' : 'MISSION REPORT'}</h2>
-          <div className="hud-result-stats">
-            <div><span>Terrain:</span> <span>{missionReport.terrainName}</span></div>
-            <div><span>Predicted zone score:</span> <span>{missionReport.prediction ? `${formatNum(missionReport.prediction.score)}%` : '--'}</span></div>
-            <div><span>Predicted classification:</span> <span>{missionReport.prediction?.classification?.toUpperCase() || '--'}</span></div>
-            <div><span>Actual hazard at touchdown:</span> <span>{formatNum(missionReport.actual.hazard)}%</span></div>
-            <div><span>Actual traversability:</span> <span>{formatNum(missionReport.actual.traversability)}%</span></div>
-            <div><span>Touchdown assessment:</span> <span>{missionReport.actual.assessment.toUpperCase()}</span></div>
-            <div><span>Impact Speed:</span> <span>{formatNum(s.impactSpeed)} m/s</span></div>
-            <div><span>Fuel Remaining:</span> <span>{formatNum(s.fuel)} kg</span></div>
-            <div><span>Mission Time:</span> <span>{formatNum(s.missionTime)} s</span></div>
-          </div>
-          <button className="hud-control-btn hud-report-btn" onClick={onReturnToInspection}>
-            RETURN TO INSPECTION
-          </button>
-        </div>
-      )}
-
-      {phase === 'descent' && (
-        <div className="hud-crosshair">
-          <div className="crosshair-h" />
-          <div className="crosshair-v" />
-          <div className="crosshair-circle" />
-        </div>
-      )}
+            <div className="hud-section">
+              <div className="hud-section-label">REPORTS</div>
+              <div className="hud-action-list">
+                {REPORT_KINDS.map(([kind, label]) => (
+                  <button
+                    key={kind}
+                    className="hud-action-btn secondary"
+                    disabled={reportBusy || !analysis.jobId}
+                    onClick={() => { uiConfirm(); onGenerateReport(kind); }}
+                  >
+                    {reportBusy ? 'GENERATING…' : label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="hud-empty-state">SELECT A DATASET TO BEGIN</div>
+        ))}
+      </div>
     </div>
   );
 }

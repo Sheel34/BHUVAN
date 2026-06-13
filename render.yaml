@@ -1,0 +1,23 @@
+# Render.com blueprint for the BHUVAN FastAPI backend.
+# Frontend deploys separately to Vercel (see vercel.json + docs/DEPLOYMENT.md).
+services:
+  - type: web
+    name: bhuvan-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Set to the deployed frontend origin, e.g. https://bhuvan.vercel.app
+      - key: BHUVAN_CORS_ORIGINS
+        sync: false
+      - key: ARES_WORKSPACE_DB
+        value: /data/workspace.db
+      - key: ARES_MOON_CACHE
+        value: /data/moon
+    disk:
+      name: bhuvan-data
+      mountPath: /data
+      sizeGB: 1

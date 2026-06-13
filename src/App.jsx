@@ -1,51 +1,28 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import IntroScreen from './components/IntroScreen';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import HUD from './components/HUD';
+import DebugOverlay from './components/DebugOverlay';
+import GlobeOverlay from './components/GlobeOverlay';
+import MissionDossier from './components/MissionDossier';
+import ReportModal from './components/ReportModal';
+import SystemMonitor from './components/SystemMonitor';
 import SceneCanvas from './scene/SceneCanvas';
-import { inspectTerrainPoint, sampleHeight, sampleRaster, hazardLevel } from './engine/terrain';
-import { createLanderState, updateLander, computeAutopilot } from './engine/physics';
-import { analyzeSample, analyzeUpload, fetchSampleCatalog } from './lib/api';
-import { analyzeFallbackSample, getFallbackSamples } from './lib/fallbackAnalysis';
+import MoonGlobe from './scene/MoonGlobe';
+import { inspectTerrainPoint } from './engine/terrain';
 import {
-  resumeAudio,
-  startWind,
-  startThruster,
-  setThrusterLevel,
-  stopThruster,
-  startWarningBeep,
-  stopWarningBeep,
-  playImpact,
-  stopAll,
-} from './engine/audio';
+  analyzeSample,
+  analyzeUpload,
+  fetchSampleCatalog,
+  fetchMoonTextures,
+  generateReport,
+} from './lib/api';
+import { surfaceSampleFor } from './lib/lunarMissions';
+import { resumeAudio, startWind, stopAll } from './engine/audio';
 
 const DEFAULT_VIEW = 'hazard';
 
-function createMissionReport(analysis, selectedZone, finalState) {
-  const terrainName = analysis?.metadata?.terrainName || 'Unknown Terrain';
-  const prediction = selectedZone
-    ? {
-        score: selectedZone.score,
-        classification: selectedZone.classification,
-      }
-    : null;
-
-  const actual = {
-    hazard: Number(((finalState.touchdownRisk || 0) * 100).toFixed(1)),
-    traversability: Number(((finalState.touchdownTraversability || 0) * 100).toFixed(1)),
-    assessment: finalState.crashed ? 'crashed' : finalState.touchdownAssessment,
-  };
-
-  return {
-    terrainName,
-    prediction,
-    actual,
-    outcome: finalState.crashed ? 'crashed' : 'landed',
-    safeAreaPct: analysis?.metadata?.safeAreaPct ?? null,
-  };
-}
-
 export default function App() {
-  const [phase, setPhase] = useState('intro');
+  const [phase, setPhase] = useState('globe');
+  const [moonTextures, setMoonTextures] = useState(null);
   const [viewMode, setViewMode] = useState(DEFAULT_VIEW);
   const [analysis, setAnalysis] = useState(null);
   const [analysisStatus, setAnalysisStatus] = useState('idle');
@@ -53,15 +30,15 @@ export default function App() {
   const [sampleCatalog, setSampleCatalog] = useState([]);
   const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [inspectedPoint, setInspectedPoint] = useState(null);
-  const [landerState, setLanderState] = useState(null);
-  const [missionReport, setMissionReport] = useState(null);
-  const [autopilot, setAutopilot] = useState(true);
+  // Camera focus is deliberate (zone/POI selection); the hover probe must
+  // never move the camera.
+  const [focusPoint, setFocusPoint] = useState(null);
   const [backendMode, setBackendMode] = useState('connecting');
-
-  const keysRef = useRef({});
-  const landerRef = useRef(null);
-  const rafRef = useRef(null);
-  const lastTimeRef = useRef(null);
+  const [debugMode, setDebugMode] = useState(false);
+  const [report, setReport] = useState(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [selectedMission, setSelectedMission] = useState(null);
+  const [flyToMission, setFlyToMission] = useState(null);
 
   const selectedZone = useMemo(
     () => analysis?.landingZones?.find((zone) => zone.id === selectedZoneId) || null,
@@ -72,32 +49,27 @@ export default function App() {
     ? [selectedZone.x, selectedZone.y, selectedZone.z, selectedZone.radius]
     : null;
   const landingTargetHazard = selectedZone
-    ? hazardLevel((100 - selectedZone.score) / 100)
+    ? (selectedZone.classification === 'unsafe' ? 2 : selectedZone.classification === 'caution' ? 1 : 0)
     : 0;
 
   useEffect(() => {
-    const onDown = (e) => { keysRef.current[e.key.toLowerCase()] = true; };
-    const onUp = (e) => { keysRef.current[e.key.toLowerCase()] = false; };
-    window.addEventListener('keydown', onDown);
-    window.addEventListener('keyup', onUp);
-    return () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup', onUp);
-    };
-  }, []);
-
-  useEffect(() => {
     let active = true;
+    setBackendMode('connecting');
     fetchSampleCatalog()
-      .then((samples) => {
+      .then((catalog) => {
         if (!active) return;
+        const samples = Array.isArray(catalog) ? catalog : catalog.samples || [];
+        const mode = Array.isArray(catalog) ? 'online' : catalog.backendMode || 'error';
         setSampleCatalog(samples);
-        setBackendMode('online');
+        setBackendMode(mode);
+        if (mode !== 'online') {
+          setAnalysisError('Backend unavailable. Using local demo terrain.');
+        }
       })
       .catch(() => {
         if (!active) return;
-        setSampleCatalog(getFallbackSamples());
-        setBackendMode('fallback');
+        setAnalysisError('Backend unavailable. Using local mode.');
+        setBackendMode('error');
       });
     return () => {
       active = false;
@@ -105,54 +77,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    fetchMoonTextures().then((urls) => {
+      if (active) setMoonTextures(urls);
+    });
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      stopAll();
+      active = false;
     };
   }, []);
 
-  const setSelectedZone = useCallback((zone) => {
-    setSelectedZoneId(zone?.id || null);
-    if (zone && analysis) {
-      setInspectedPoint({
-        x: zone.x,
-        y: zone.y,
-        z: zone.z,
-        metrics: inspectTerrainPoint(analysis, zone.x, zone.z),
-      });
-    }
-  }, [analysis]);
+  useEffect(() => () => stopAll(), []);
 
   const applyAnalysisResult = useCallback((result) => {
     setAnalysis(result);
-    setMissionReport(null);
-    setLanderState(null);
-    landerRef.current = null;
+    setReport(null);
     const topZone = result?.landingZones?.[0] || null;
     setSelectedZoneId(topZone?.id || null);
-    setInspectedPoint(
-      topZone
-        ? { x: topZone.x, y: topZone.y, z: topZone.z, metrics: inspectTerrainPoint(result, topZone.x, topZone.z) }
-        : null
-    );
+    const initialPoint = topZone
+      ? { x: topZone.x, y: topZone.y, z: topZone.z, metrics: inspectTerrainPoint(result, topZone.x, topZone.z) }
+      : null;
+    setInspectedPoint(initialPoint);
+    setFocusPoint(initialPoint);
     setViewMode(DEFAULT_VIEW);
-    setPhase('inspect3d');
+    setPhase('workspace');
   }, []);
 
   const handleAnalyzeSample = useCallback(async (sampleId) => {
     setAnalysisStatus('loading');
     setAnalysisError('');
     try {
-      const result = backendMode === 'online'
-        ? await analyzeSample(sampleId)
-        : analyzeFallbackSample(sampleId);
+      const result = await analyzeSample(sampleId);
       applyAnalysisResult(result);
       setAnalysisStatus('ready');
     } catch (error) {
       setAnalysisStatus('error');
       setAnalysisError(error.message || 'Analysis failed.');
     }
-  }, [applyAnalysisResult, backendMode]);
+  }, [applyAnalysisResult]);
 
   const handleUpload = useCallback(async (file) => {
     if (!file) return;
@@ -169,10 +130,29 @@ export default function App() {
     }
   }, [applyAnalysisResult]);
 
-  const handleStart = useCallback(() => {
+  const handleGlobeSiteSelected = useCallback((site) => {
     resumeAudio();
     startWind();
-    setPhase('analyze');
+    setSelectedMission(null);
+    setFlyToMission(null);
+    handleAnalyzeSample(site.sampleId);
+  }, [handleAnalyzeSample]);
+
+  // Dossier "explore surface" → fly the globe to the site, then analyze
+  // it. Missions without a real DEM fall back to a matched analogue.
+  const handleSurveyMission = useCallback((mission) => {
+    setSelectedMission(null);
+    setFlyToMission({ ...mission, sampleId: surfaceSampleFor(mission) });
+  }, []);
+
+  const handleEnterWorkspace = useCallback(() => {
+    resumeAudio();
+    startWind();
+    setPhase('workspace');
+  }, []);
+
+  const handleBackToGlobe = useCallback(() => {
+    setPhase('globe');
   }, []);
 
   const handleInspectPoint = useCallback((wx, wz) => {
@@ -184,106 +164,84 @@ export default function App() {
   const handleSelectZoneById = useCallback((zoneId) => {
     const zone = analysis?.landingZones?.find((candidate) => candidate.id === zoneId);
     if (!zone) return;
-    setSelectedZone(zone);
-  }, [analysis, setSelectedZone]);
-
-  const handleInitDescent = useCallback(() => {
-    if (!analysis || !selectedZone) return;
-
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
-    const state = createLanderState(selectedZone.x, selectedZone.z, 120);
-    landerRef.current = state;
-    setLanderState(state);
-    setMissionReport(null);
-
-    resumeAudio();
-    startThruster();
-    setPhase('descent');
-    lastTimeRef.current = performance.now();
-
-    const loop = (time) => {
-      const dt = Math.min((time - (lastTimeRef.current || time)) / 1000, 0.05);
-      lastTimeRef.current = time;
-
-      let stateRef = landerRef.current;
-      if (!stateRef || stateRef.landed || stateRef.crashed) {
-        if (stateRef && (stateRef.landed || stateRef.crashed)) {
-          stopThruster();
-          stopWarningBeep();
-          playImpact(stateRef.crashed);
-          setMissionReport(createMissionReport(analysis, selectedZone, stateRef));
-          setLanderState({ ...stateRef });
-          setPhase('report');
-        }
-        return;
-      }
-
-      if (!autopilot) {
-        const keys = keysRef.current;
-        let throttle = stateRef.throttle;
-        if (keys.w || keys.arrowup) throttle = Math.min(1, throttle + 2 * dt);
-        else if (keys.s || keys.arrowdown) throttle = Math.max(0, throttle - 2 * dt);
-        stateRef.throttle = throttle;
-        stateRef.lateralX = (keys.d ? 1 : 0) + (keys.a ? -1 : 0);
-        stateRef.lateralZ = (keys.q ? -1 : 0) + (keys.e ? 1 : 0);
-      } else {
-        const groundH = sampleHeight(analysis.terrain, stateRef.x, stateRef.z);
-        const ap = computeAutopilot(stateRef, groundH);
-        stateRef.throttle = ap.throttle;
-        stateRef.lateralX = ap.lateralX;
-        stateRef.lateralZ = ap.lateralZ;
-      }
-
-      const groundH = sampleHeight(analysis.terrain, stateRef.x, stateRef.z);
-      const surfaceAssessment = {
-        hazard: sampleRaster(analysis.layers.hazard, analysis.terrain, stateRef.x, stateRef.z),
-        traversability: sampleRaster(analysis.layers.traversability, analysis.terrain, stateRef.x, stateRef.z),
-      };
-      const newState = updateLander(stateRef, dt, groundH, surfaceAssessment);
-      landerRef.current = newState;
-      setLanderState({ ...newState });
-
-      setThrusterLevel(newState.throttle);
-      const alt = newState.y - groundH;
-      if (alt < 20 || surfaceAssessment.hazard > 0.55) {
-        startWarningBeep(alt < 8 || surfaceAssessment.hazard > 0.7 ? 300 : 700);
-      } else {
-        stopWarningBeep();
-      }
-
-      rafRef.current = requestAnimationFrame(loop);
+    setSelectedZoneId(zone.id);
+    const point = {
+      x: zone.x,
+      y: zone.y,
+      z: zone.z,
+      metrics: inspectTerrainPoint(analysis, zone.x, zone.z),
     };
+    setInspectedPoint(point);
+    setFocusPoint(point);
+  }, [analysis]);
 
-    rafRef.current = requestAnimationFrame(loop);
-  }, [analysis, autopilot, selectedZone]);
+  const handleFocusInterestRegion = useCallback((poi) => {
+    if (!analysis) return;
+    const metrics = inspectTerrainPoint(analysis, poi.x, poi.z);
+    const point = { x: poi.x, y: metrics.elevation, z: poi.z, metrics };
+    setInspectedPoint(point);
+    setFocusPoint(point);
+  }, [analysis]);
 
-  const handleReturnToInspection = useCallback(() => {
-    setPhase('inspect3d');
+  const handleGenerateReport = useCallback(async (kind) => {
+    if (!analysis?.jobId) return;
+    setReportBusy(true);
+    try {
+      const result = await generateReport(analysis.jobId, kind);
+      setReport(result);
+    } catch (error) {
+      setAnalysisError(error.message || 'Report generation failed.');
+    } finally {
+      setReportBusy(false);
+    }
+  }, [analysis]);
+
+  const handleToggleDebug = useCallback(() => {
+    setDebugMode((current) => !current);
   }, []);
 
-  const handleToggleAutopilot = useCallback(() => {
-    setAutopilot((current) => !current);
-  }, []);
-
-  if (phase === 'intro') {
-    return <IntroScreen onStart={handleStart} />;
+  if (phase === 'globe') {
+    return (
+      <div className="simulation-root">
+        <MoonGlobe
+          textureUrls={moonTextures}
+          onMissionSelect={setSelectedMission}
+          onSiteSelected={handleGlobeSiteSelected}
+          flyToMission={flyToMission}
+        />
+        <SystemMonitor />
+        <GlobeOverlay
+          analysisStatus={analysisStatus}
+          analysisError={analysisError}
+          textureSource={moonTextures ? 'real' : 'procedural'}
+          onSelectMission={setSelectedMission}
+          onOpenWorkbench={handleEnterWorkspace}
+        />
+        <MissionDossier
+          mission={selectedMission}
+          onClose={() => setSelectedMission(null)}
+          onSurvey={handleSurveyMission}
+        />
+      </div>
+    );
   }
 
   return (
     <div className="simulation-root">
       <SceneCanvas
-        phase={phase}
         analysis={analysis}
-        landerState={landerState}
         viewMode={viewMode}
         landingTarget={landingTarget}
         landingTargetHazard={landingTargetHazard}
         inspectedPoint={inspectedPoint}
+        focusPoint={focusPoint}
+        interestRegions={analysis?.intelligence?.interest_regions || []}
         onInspectPoint={handleInspectPoint}
+        debugMode={debugMode}
       />
+      <pre id="perf-stats" className="perf-stats" />
+      <SystemMonitor />
       <HUD
-        phase={phase}
         backendMode={backendMode}
         analysis={analysis}
         analysisStatus={analysisStatus}
@@ -291,18 +249,25 @@ export default function App() {
         sampleCatalog={sampleCatalog}
         selectedZoneId={selectedZoneId}
         inspectedPoint={inspectedPoint}
-        missionReport={missionReport}
-        landerState={landerState || {}}
         viewMode={viewMode}
-        autopilot={autopilot}
+        debugMode={debugMode}
+        reportBusy={reportBusy}
+        onViewModeChange={setViewMode}
         onAnalyzeSample={handleAnalyzeSample}
         onUpload={handleUpload}
         onSelectZone={handleSelectZoneById}
-        onViewModeChange={setViewMode}
-        onInitDescent={handleInitDescent}
-        onReturnToInspection={handleReturnToInspection}
-        onToggleAutopilot={handleToggleAutopilot}
+        onFocusInterestRegion={handleFocusInterestRegion}
+        onGenerateReport={handleGenerateReport}
+        onToggleDebug={handleToggleDebug}
+        onBackToGlobe={handleBackToGlobe}
       />
+      <DebugOverlay
+        analysis={analysis}
+        inspectedPoint={inspectedPoint}
+        selectedZone={selectedZone}
+        visible={debugMode}
+      />
+      <ReportModal report={report} onClose={() => setReport(null)} />
     </div>
   );
 }

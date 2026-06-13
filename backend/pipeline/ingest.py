@@ -6,17 +6,15 @@ import cv2
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-try:
-    import rasterio  # type: ignore
-    from rasterio.enums import Resampling  # type: ignore
+import rasterio  # type: ignore
+from rasterio.enums import Resampling  # type: ignore
+from rasterio.errors import RasterioIOError
 
-    HAS_RASTERIO = True
-except ImportError:
-    HAS_RASTERIO = False
-
-DEFAULT_SIZE = 160
-DEFAULT_WORLD_SCALE_M = 200.0
-DEFAULT_HEIGHT_SCALE_M = 30.0
+# 512-cell grid over a 2 km patch (~3.9 m/cell) — large-terrain defaults
+# sized for dedicated-GPU rendering via the chunked LOD pipeline.
+DEFAULT_SIZE = 512
+DEFAULT_WORLD_SCALE_M = 2000.0
+DEFAULT_HEIGHT_SCALE_M = 220.0
 
 
 def _normalize_grid(grid: np.ndarray) -> np.ndarray:
@@ -61,6 +59,34 @@ def generate_sample(
         ridges = 0.12 * np.sin(xx * 18.0) + 0.08 * np.cos(zz * 22.0)
         grid = rim + bowl + ridges
         name = "Lunar South Pole Analogue"
+    elif sample == "moon-shackleton":
+        # Steep-walled polar crater: sharp rim, deep shadowed bowl, rim terraces
+        r = np.sqrt(xx**2 + zz**2)
+        rim = 1.1 * np.exp(-((r - 0.5) ** 2) / 0.008)
+        bowl = -1.3 * np.exp(-(r**2) / 0.14)
+        terraces = 0.08 * np.sin(r * 40.0) * np.exp(-((r - 0.42) ** 2) / 0.02)
+        rough = 0.05 * np.sin(xx * 31.0) * np.cos(zz * 27.0)
+        grid = rim + bowl + terraces + rough
+        name = "Shackleton Crater Rim Analogue"
+    elif sample == "moon-tycho":
+        # Young complex crater: central peak, hummocky floor, slumped walls
+        r = np.sqrt(xx**2 + zz**2)
+        peak = 0.85 * np.exp(-(r**2) / 0.015)
+        floor = -0.55 * np.exp(-(r**2) / 0.30)
+        wall = 0.7 * np.exp(-((r - 0.75) ** 2) / 0.012)
+        hummocks = 0.10 * np.sin(xx * 23.0 + 1.7) * np.sin(zz * 19.0)
+        grid = peak + floor + wall + hummocks
+        name = "Tycho Crater Floor Analogue"
+    elif sample == "moon-mare-tranquillitatis":
+        # Flat basaltic mare: gentle wrinkle ridges, scattered small craters
+        ridges = 0.18 * np.sin(xx * 6.0 + zz * 2.0) * np.exp(-(zz**2) / 0.5)
+        plain = 0.05 * np.sin(xx * 3.0) * np.cos(zz * 4.0)
+        craters = np.zeros_like(xx)
+        for cx, cz, cr in ((0.3, -0.2, 0.05), (-0.45, 0.35, 0.03), (-0.1, -0.5, 0.04)):
+            d2 = (xx - cx) ** 2 + (zz - cz) ** 2
+            craters += -0.3 * np.exp(-d2 / cr) + 0.12 * np.exp(-((np.sqrt(d2) - np.sqrt(cr) * 1.4) ** 2) / 0.004)
+        grid = ridges + plain + craters
+        name = "Mare Tranquillitatis Analogue"
     elif sample == "mars-gale":
         mound = 0.9 * np.exp(-((xx * 0.7) ** 2 + (zz * 0.7) ** 2) / 0.18)
         channel = -0.25 * np.exp(-((xx + 0.25) ** 2) / 0.04)
@@ -115,35 +141,79 @@ def ingest_geotiff(
     path: str,
     target_size: int = 512,
 ) -> tuple[np.ndarray, dict]:
-    if not HAS_RASTERIO:
-        raise RuntimeError("rasterio is not installed. Run: pip install rasterio")
+    try:
+        with rasterio.open(path) as src:
+            # Validate CRS
+            if src.crs is None:
+                raise ValueError("GeoTIFF has no CRS defined. Please provide a georeferenced DEM.")
+            
+            crs_str = str(src.crs)
+            is_projected = src.crs.is_projected
+            
+            # Extract bounds and transform
+            bounds = src.bounds
+            native_res_m = abs(src.transform.a)
+            orig_width = src.width
+            orig_height = src.height
+            
+            # Validate resolution is reasonable
+            if native_res_m <= 0 or native_res_m > 1000:
+                raise ValueError(f"Invalid resolution: {native_res_m} m/pixel. Expected 0-1000 m/pixel.")
+            
+            # Calculate resampled resolution
+            resampled_res_m = native_res_m * (orig_width / target_size)
+            world_scale_m = resampled_res_m * target_size
+            
+            # Read and resample data
+            data = src.read(
+                1,
+                out_shape=(target_size, target_size),
+                resampling=Resampling.bilinear,
+            ).astype(np.float32)
+            
+            nodata = src.nodata
+            
+            # Extract additional metadata
+            metadata_extra = {
+                "original_width": orig_width,
+                "original_height": orig_height,
+                "bounds_left": bounds.left,
+                "bounds_right": bounds.right,
+                "bounds_bottom": bounds.bottom,
+                "bounds_top": bounds.top,
+                "is_projected_crs": is_projected,
+            }
+            
+    except RasterioIOError as e:
+        raise ValueError(f"Failed to read GeoTIFF: {e}") from e
 
-    with rasterio.open(path) as src:
-        data = src.read(
-            1,
-            out_shape=(1, target_size, target_size),
-            resampling=Resampling.bilinear,
-        ).astype(np.float32)
-
-        nodata = src.nodata
-        crs_str = str(src.crs) if src.crs else "unknown"
-        native_res_m = abs(src.transform.a)
-        orig_size = src.width
-        resampled_res_m = native_res_m * (orig_size / target_size)
-        world_scale_m = resampled_res_m * target_size
-
-    grid = data[0]
+    grid = data
+    
+    # Handle nodata values
     if nodata is not None:
         grid = np.where(grid == nodata, np.nan, grid)
-
+    
+    # Validate data range
+    valid_pixels = ~np.isnan(grid)
+    if valid_pixels.sum() < 0.1 * grid.size:
+        raise ValueError("GeoTIFF has insufficient valid data (<10% of pixels).")
+    
+    # Inpaint missing data
     nan_mask = np.isnan(grid).astype(np.uint8)
     if nan_mask.any():
         grid_filled = np.where(np.isnan(grid), 0.0, grid)
         grid = cv2.inpaint(grid_filled, nan_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
-
-    height_range_m = float(np.nanmax(grid) - np.nanmin(grid))
+    
+    # Calculate height statistics
+    height_min_m = float(np.nanmin(grid))
+    height_max_m = float(np.nanmax(grid))
+    height_range_m = height_max_m - height_min_m
+    
+    if height_range_m < 0.1:
+        raise ValueError(f"Terrain has insufficient height variation: {height_range_m:.2f}m")
+    
     normalised = _normalize_grid(grid)
-
+    
     return normalised, _make_metadata(
         "GeoTIFF DEM",
         "geotiff",
@@ -152,4 +222,7 @@ def ingest_geotiff(
         height_scale_m=height_range_m,
         crs=crs_str,
         native_resolution_m_per_px=native_res_m,
+        height_min_m=height_min_m,
+        height_max_m=height_max_m,
+        **metadata_extra,
     )

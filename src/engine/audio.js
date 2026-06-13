@@ -1,4 +1,4 @@
-/* ── Web Audio API Sound Engine ── */
+/* ── Web Audio API Sound Engine — ambience + UI cues ── */
 
 let ctx = null;
 
@@ -9,7 +9,7 @@ function getCtx() {
   return ctx;
 }
 
-/* ── Ambient Mars Wind ── */
+/* ── Ambient wind (brown noise through a lowpass) ── */
 let windNode = null;
 let windGain = null;
 
@@ -54,111 +54,6 @@ export function stopWind() {
   }
 }
 
-/* ── Thruster Sound ── */
-let thrusterOsc = null;
-let thrusterNoise = null;
-let thrusterGain = null;
-
-export function startThruster() {
-  const ac = getCtx();
-  if (thrusterGain) return;
-
-  // Low rumble oscillator
-  thrusterOsc = ac.createOscillator();
-  thrusterOsc.type = 'sawtooth';
-  thrusterOsc.frequency.value = 55;
-
-  // Noise component
-  const noiseLen = ac.sampleRate * 2;
-  const noiseBuf = ac.createBuffer(1, noiseLen, ac.sampleRate);
-  const nd = noiseBuf.getChannelData(0);
-  for (let i = 0; i < noiseLen; i++) nd[i] = Math.random() * 2 - 1;
-
-  thrusterNoise = ac.createBufferSource();
-  thrusterNoise.buffer = noiseBuf;
-  thrusterNoise.loop = true;
-
-  const filter = ac.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.value = 400;
-
-  thrusterGain = ac.createGain();
-  thrusterGain.gain.value = 0;
-
-  const noiseGain = ac.createGain();
-  noiseGain.gain.value = 0.3;
-
-  thrusterOsc.connect(thrusterGain);
-  thrusterNoise.connect(noiseGain);
-  noiseGain.connect(filter);
-  filter.connect(thrusterGain);
-  thrusterGain.connect(ac.destination);
-
-  thrusterOsc.start();
-  thrusterNoise.start();
-}
-
-export function setThrusterLevel(level) {
-  if (thrusterGain) {
-    thrusterGain.gain.linearRampToValueAtTime(
-      level * 0.35,
-      getCtx().currentTime + 0.05
-    );
-  }
-  if (thrusterOsc) {
-    thrusterOsc.frequency.linearRampToValueAtTime(
-      55 + level * 80,
-      getCtx().currentTime + 0.05
-    );
-  }
-}
-
-export function stopThruster() {
-  if (thrusterOsc) { thrusterOsc.stop(); thrusterOsc = null; }
-  if (thrusterNoise) { thrusterNoise.stop(); thrusterNoise = null; }
-  thrusterGain = null;
-}
-
-/* ── Warning Beep ── */
-let beepInterval = null;
-
-export function startWarningBeep(intervalMs = 800) {
-  if (beepInterval) return;
-  const ac = getCtx();
-
-  beepInterval = setInterval(() => {
-    const osc = ac.createOscillator();
-    osc.type = 'square';
-    osc.frequency.value = 880;
-    const g = ac.createGain();
-    g.gain.value = 0.12;
-    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.15);
-    osc.connect(g);
-    g.connect(ac.destination);
-    osc.start();
-    osc.stop(ac.currentTime + 0.15);
-  }, intervalMs);
-}
-
-export function stopWarningBeep() {
-  if (beepInterval) { clearInterval(beepInterval); beepInterval = null; }
-}
-
-/* ── Impact Sound ── */
-export function playImpact(crashed) {
-  const ac = getCtx();
-  const osc = ac.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.value = crashed ? 60 : 120;
-  const g = ac.createGain();
-  g.gain.value = crashed ? 0.5 : 0.25;
-  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + (crashed ? 1.5 : 0.6));
-  osc.connect(g);
-  g.connect(ac.destination);
-  osc.start();
-  osc.stop(ac.currentTime + (crashed ? 1.5 : 0.6));
-}
-
 /* ── Resume audio context (required after user gesture) ── */
 export function resumeAudio() {
   const ac = getCtx();
@@ -167,6 +62,75 @@ export function resumeAudio() {
 
 export function stopAll() {
   stopWind();
-  stopThruster();
-  stopWarningBeep();
+}
+
+/* ── UI cues ──
+ * Mute applies to UI cues and speech; ambience is governed by app phase.
+ * Mute preference persists in localStorage.
+ */
+
+const MUTE_KEY = 'bhuvan.audio.muted';
+
+let uiMuted = (() => {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+
+export function isMuted() {
+  return uiMuted;
+}
+
+export function toggleMute() {
+  uiMuted = !uiMuted;
+  try {
+    localStorage.setItem(MUTE_KEY, uiMuted ? '1' : '0');
+  } catch {
+    // private mode — non-persistent mute is fine
+  }
+  if (uiMuted) {
+    // Mute means silence: kill ambience + any speech, not just UI cues.
+    window.speechSynthesis?.cancel();
+    stopWind();
+  } else {
+    resumeAudio();
+    startWind();
+  }
+  return uiMuted;
+}
+
+function blip({ freq = 880, duration = 0.06, type = 'square', gain = 0.04, when = 0 }) {
+  if (uiMuted) return;
+  const ac = getCtx();
+  if (ac.state === 'suspended') ac.resume();
+  const osc = ac.createOscillator();
+  const amp = ac.createGain();
+  const t0 = ac.currentTime + when;
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  amp.gain.setValueAtTime(gain, t0);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.connect(amp);
+  amp.connect(ac.destination);
+  osc.start(t0);
+  osc.stop(t0 + duration + 0.02);
+}
+
+/** Short neutral tick — layer switches, list selections. */
+export function uiTick() {
+  blip({ freq: 1320, duration: 0.04, gain: 0.03 });
+}
+
+/** Two-tone confirm — analysis complete, zone locked. */
+export function uiConfirm() {
+  blip({ freq: 740, duration: 0.07 });
+  blip({ freq: 1108, duration: 0.09, when: 0.08 });
+}
+
+/** Descending two-tone — errors. */
+export function uiAlert() {
+  blip({ freq: 622, duration: 0.12, type: 'sawtooth', gain: 0.05 });
+  blip({ freq: 415, duration: 0.16, type: 'sawtooth', gain: 0.05, when: 0.13 });
 }
