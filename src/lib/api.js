@@ -282,9 +282,9 @@ function generateMockAnalysis(id) {
   // not a tiny patch. Chunked LOD keeps it cheap to render.
   const size = 192;
 
-  const scale = 320;
+  const scale = 400;
 
-  const heightScale = 48;
+  const heightScale = 72;
 
   const data = new Float32Array(size * size);
 

@@ -5,6 +5,8 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
+import LanderTwin from './LanderTwin';
+import { getRegolithMaps } from './lunarSurface';
 import { sampleHeight } from '../engine/terrain';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
@@ -136,10 +138,28 @@ function InterestBeacon({ poi, terrain }) {
    larger ground disc so its edges read as "more moon", not a cliff into
    space. Fog swallows the far rim. ── */
 function EdgeApron({ worldScale, minH }) {
+  const maps = getRegolithMaps();
+  const { normalMap, roughnessMap } = useMemo(() => {
+    const n = maps.normal.clone();
+    n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(260, 260);
+    const r = maps.roughness.clone();
+    r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping; r.repeat.set(260, 260);
+    return { normalMap: n, roughnessMap: r };
+  }, [maps]);
+  // Vast regolith plain the analyzed patch sits inside — same rock detail as
+  // the patch so the seam disappears and the surface reads as endless,
+  // dissolving into the fogged horizon rather than a floating tile.
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.01, 0]} receiveShadow>
-      <circleGeometry args={[worldScale * 14, 96]} />
-      <meshStandardMaterial color="#5a5a5e" roughness={1} metalness={0} />
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.006, 0]} receiveShadow>
+      <circleGeometry args={[worldScale * 60, 128]} />
+      <meshStandardMaterial
+        color="#6a6a70"
+        roughness={1}
+        metalness={0}
+        normalMap={normalMap}
+        normalScale={new THREE.Vector2(0.45, 0.45)}
+        roughnessMap={roughnessMap}
+      />
     </mesh>
   );
 }
@@ -222,8 +242,9 @@ function Lighting({ worldScale }) {
       />
       <directionalLight position={[-s * 0.2, s * 0.1, -s * 0.15]} intensity={0.3} color="#aabbff" />
       {/* Fog color MUST match the scene background — any mismatch reads as
-          holes in the terrain at grazing camera angles. */}
-      <fog attach="fog" args={['#0b0c10', s * 0.45, s * 1.8]} />
+          holes in the terrain at grazing camera angles. Pushed far so the
+          vast plain dissolves into a distant horizon, not a wall. */}
+      <fog attach="fog" args={['#0b0c10', s * 1.1, s * 6.0]} />
     </>
   );
 }
@@ -294,10 +315,10 @@ export default function SceneCanvas({
       shadows="soft"
       dpr={[1, 2]}
       camera={{
-        position: [-worldScale * 0.32, worldScale * 0.22, worldScale * 0.38],
-        fov: 50,
+        position: [-worldScale * 0.34, worldScale * 0.14, worldScale * 0.42],
+        fov: 55,
         near: 0.5,
-        far: worldScale * 8,
+        far: worldScale * 9,
       }}
       gl={{
         antialias: true,
@@ -330,6 +351,9 @@ export default function SceneCanvas({
       <group onClick={handleClick} onPointerMove={handlePointerMove}>
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
       </group>
+
+      {/* Live digital twin driven by the telemetry bus — tiny, for scale. */}
+      {terrain && <LanderTwin terrain={terrain} />}
 
       {landingTarget && (
         <LandingMarker
