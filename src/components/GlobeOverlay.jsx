@@ -3,7 +3,7 @@ import { LUNAR_MISSIONS } from '../lib/lunarMissions';
 
 // A short, recognisable set surfaced as quick shortcuts; the full set
 // lives as markers on the globe.
-const FEATURED = ['apollo-11', 'apollo-17', 'change-4', 'chandrayaan-3', 'luna-17'];
+const FEATURED = ['apollo-11', 'change-4', 'chandrayaan-3', 'luna-17'];
 
 /**
  * DOM overlay for the hero Moon globe: title block, mission shortcuts,
@@ -25,7 +25,6 @@ export default function GlobeOverlay({
     <div className="globe-overlay">
       <header className="globe-header">
         <div className="globe-badge">
-          <span className="badge-dot" />
           PLANETARY TERRAIN INTELLIGENCE
         </div>
         <h1 className="globe-title">BHUVAN</h1>

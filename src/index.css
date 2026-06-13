@@ -1145,13 +1145,13 @@ html, body, #root {
 
 .globe-sites {
   position: absolute;
-  right: 56px;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 48px;
+  top: 120px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 250px;
+  max-width: calc(100vw - 64px);
   pointer-events: auto;
   animation: globe-fade-in 1.2s 0.45s ease both;
 }

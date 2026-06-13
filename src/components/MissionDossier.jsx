@@ -65,11 +65,9 @@ export default function MissionDossier({ mission, onClose, onSurvey }) {
         </section>
       )}
 
-      {mission.sampleId && (
-        <button className="dossier-survey-btn" onClick={() => onSurvey(mission)}>
-          RUN TERRAIN SURVEY AT THIS SITE →
-        </button>
-      )}
+      <button className="dossier-survey-btn" onClick={() => onSurvey(mission)}>
+        EXPLORE THIS SITE'S SURFACE →
+      </button>
     </aside>
   );
 }

@@ -289,7 +289,11 @@ def get_samples():
                 entry["cached"] = False
         else:
             entry["cached"] = True  # Procedural samples are always available
-        samples.append(entry)
+
+        # Real-data samples need a multi-GB download; listing an uncached
+        # one produces a button that 404s. Only surface usable samples.
+        if entry["cached"]:
+            samples.append(entry)
 
     return {
         "api_version": API_VERSION,

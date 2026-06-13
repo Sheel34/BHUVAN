@@ -216,3 +216,14 @@ export const MISSION_TYPE_STYLE = {
 export function missionsWithSurvey() {
   return LUNAR_MISSIONS.filter((m) => m.sampleId);
 }
+
+// Every mission is explorable: use its real-DEM sample if linked,
+// otherwise the closest procedural analogue for its terrain type so the
+// workspace always has a representative surface to land on.
+export function surfaceSampleFor(mission) {
+  if (mission.sampleId) return mission.sampleId;
+  const s = (mission.site || '').toLowerCase();
+  if (/pole|shackleton/.test(s)) return 'moon-shackleton';
+  if (/crater|kármán|karman|shioli|le monnier|tycho|basin/.test(s)) return 'moon-tycho';
+  return 'moon-mare-tranquillitatis'; // mare / plains default
+}

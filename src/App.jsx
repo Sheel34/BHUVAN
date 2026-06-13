@@ -15,6 +15,7 @@ import {
   fetchMoonTextures,
   generateReport,
 } from './lib/api';
+import { surfaceSampleFor } from './lib/lunarMissions';
 import { resumeAudio, startWind, stopAll } from './engine/audio';
 
 const DEFAULT_VIEW = 'hazard';
@@ -137,10 +138,11 @@ export default function App() {
     handleAnalyzeSample(site.sampleId);
   }, [handleAnalyzeSample]);
 
-  // Dossier "run survey" → fly the globe to the site, then analyze it.
+  // Dossier "explore surface" → fly the globe to the site, then analyze
+  // it. Missions without a real DEM fall back to a matched analogue.
   const handleSurveyMission = useCallback((mission) => {
     setSelectedMission(null);
-    setFlyToMission(mission);
+    setFlyToMission({ ...mission, sampleId: surfaceSampleFor(mission) });
   }, []);
 
   const handleEnterWorkspace = useCallback(() => {

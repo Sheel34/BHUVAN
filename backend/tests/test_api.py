@@ -72,9 +72,14 @@ def test_samples_catalog():
     response = client.get("/api/v1/samples")
     assert response.status_code == 200
     samples = response.json()["samples"]
-    assert {s["id"] for s in samples} == set(SAMPLE_REGISTRY)
+    listed = {s["id"] for s in samples}
+    # Catalog lists only usable samples (procedural always; real DEMs only
+    # when downloaded) so the UI never shows a button that 404s.
+    assert listed.issubset(set(SAMPLE_REGISTRY))
+    assert set(PROCEDURAL_SAMPLES).issubset(listed)
     for sample in samples:
         assert sample["label"] and sample["source"]
+        assert sample["cached"] is True
 
 
 @pytest.mark.parametrize("sample_id", PROCEDURAL_SAMPLES)

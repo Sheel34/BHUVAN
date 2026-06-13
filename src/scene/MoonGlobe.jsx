@@ -155,18 +155,28 @@ function MissionMarker({ mission, moonGroupRef, hovered, onHover, onSelect, flyi
       </mesh>
       {/* head */}
       <group position={tip.toArray()}>
-        {/* soft halo so the pin reads against bright regolith */}
-        <mesh>
-          <sphereGeometry args={[0.075, 16, 16]} />
-          <meshBasicMaterial color={style.color} transparent opacity={0.18} toneMapped={false} depthWrite={false} />
-        </mesh>
+        {/* large invisible hit target — small dots are hard to click */}
         <mesh
-          ref={dotRef}
           onPointerOver={(e) => { e.stopPropagation(); if (!flying) onHover(mission.id); }}
           onPointerOut={(e) => { e.stopPropagation(); onHover(null); }}
           onClick={(e) => { e.stopPropagation(); if (!flying) onSelect(mission); }}
         >
-          <sphereGeometry args={[0.045, 16, 16]} />
+          <sphereGeometry args={[0.11, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        {/* subtle halo — only really shows on hover */}
+        <mesh>
+          <sphereGeometry args={[0.055, 16, 16]} />
+          <meshBasicMaterial
+            color={style.color}
+            transparent
+            opacity={hovered ? 0.3 : 0.1}
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh ref={dotRef}>
+          <sphereGeometry args={[0.028, 16, 16]} />
           <meshBasicMaterial color={hovered ? '#ffffff' : style.color} toneMapped={false} />
         </mesh>
         {hovered && !flying && (
