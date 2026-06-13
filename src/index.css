@@ -1407,6 +1407,15 @@ html, body, #root {
 
 .sysmon-nogpu { font-size: 9px; letter-spacing: 0.08em; color: var(--text-dim); }
 
+.sysmon-section {
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.sysmon-warn { color: var(--accent-orange); }
+
 .sysmon-specline {
   font-size: 8.5px;
   letter-spacing: 0.06em;

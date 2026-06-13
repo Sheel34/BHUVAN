@@ -17,6 +17,7 @@ import {
 } from './lib/api';
 import { surfaceSampleFor } from './lib/lunarMissions';
 import { resumeAudio, startWind, stopAll } from './engine/audio';
+import { readWebGLGpu } from './lib/clientGpu';
 
 const DEFAULT_VIEW = 'hazard';
 
@@ -39,6 +40,11 @@ export default function App() {
   const [reportBusy, setReportBusy] = useState(false);
   const [selectedMission, setSelectedMission] = useState(null);
   const [flyToMission, setFlyToMission] = useState(null);
+  const [clientGpu, setClientGpu] = useState(null);
+
+  const handleGlReady = useCallback((gl) => {
+    setClientGpu(readWebGLGpu(gl));
+  }, []);
 
   const selectedZone = useMemo(
     () => analysis?.landingZones?.find((zone) => zone.id === selectedZoneId) || null,
@@ -208,8 +214,9 @@ export default function App() {
           onMissionSelect={setSelectedMission}
           onSiteSelected={handleGlobeSiteSelected}
           flyToMission={flyToMission}
+          onGlReady={handleGlReady}
         />
-        <SystemMonitor />
+        <SystemMonitor clientGpu={clientGpu} />
         <GlobeOverlay
           analysisStatus={analysisStatus}
           analysisError={analysisError}
@@ -238,9 +245,10 @@ export default function App() {
         interestRegions={analysis?.intelligence?.interest_regions || []}
         onInspectPoint={handleInspectPoint}
         debugMode={debugMode}
+        onGlReady={handleGlReady}
       />
       <pre id="perf-stats" className="perf-stats" />
-      <SystemMonitor />
+      <SystemMonitor clientGpu={clientGpu} />
       <HUD
         backendMode={backendMode}
         analysis={analysis}

@@ -253,6 +253,7 @@ export default function SceneCanvas({
   interestRegions = [],
   onInspectPoint,
   debugMode = false,
+  onGlReady,
 }) {
   const terrain = analysis?.terrain;
   const layers = analysis?.layers;
@@ -306,6 +307,7 @@ export default function SceneCanvas({
       }}
       onCreated={({ gl }) => {
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
+        if (onGlReady) onGlReady(gl);
       }}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
     >

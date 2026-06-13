@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { API_BASE } from '../lib/api';
-const POLL_MS = 1000;
+import { API_BASE, isLocalBackend } from '../lib/api';
 
-// Calm by default — steel for normal load, warm only when genuinely high.
+const POLL_MS = 1000;
+const remoteBackend = !isLocalBackend();
+
 function loadColor(pct) {
   if (pct == null) return 'var(--text-dim)';
   if (pct < 65) return '#93a4c4';
@@ -31,12 +32,15 @@ function Bar({ label, value, max = 100, unit = '%', detail }) {
   );
 }
 
+function SectionLabel({ children }) {
+  return <div className="sysmon-section">{children}</div>;
+}
+
 /**
- * Live hardware monitor: real CPU/RAM via psutil, real GPU load, VRAM,
- * temperature, and power via NVIDIA NVML, plus render FPS measured on
- * this page. Collapsible to a tiny pill; fully closeable.
+ * Live monitor: WebGL GPU + FPS from this laptop; CPU/RAM/GPU load from the
+ * backend host (local NVML when API is localhost, cloud host stats when remote).
  */
-export default function SystemMonitor() {
+export default function SystemMonitor({ clientGpu }) {
   const [open, setOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [specs, setSpecs] = useState(null);
@@ -45,7 +49,6 @@ export default function SystemMonitor() {
   const [fps, setFps] = useState(0);
   const frames = useRef(0);
 
-  // Real frame counter — counts rAF ticks on this page
   useEffect(() => {
     let raf;
     let last = performance.now();
@@ -103,7 +106,8 @@ export default function SystemMonitor() {
     );
   }
 
-  const gpu = stats?.gpu;
+  const serverGpu = stats?.gpu;
+  const showServerNvml = !remoteBackend && serverGpu;
 
   return (
     <aside className={`sysmon ${collapsed ? 'collapsed' : ''}`}>
@@ -123,6 +127,69 @@ export default function SystemMonitor() {
 
       {!collapsed && (
         <div className="sysmon-body">
+          <SectionLabel>RENDER · THIS DEVICE</SectionLabel>
+          {clientGpu ? (
+            <>
+              <div className="sysmon-specline" title={clientGpu.vendor || undefined}>
+                {clientGpu.renderer}
+              </div>
+              {clientGpu.software ? (
+                <div className="sysmon-row sysmon-nogpu sysmon-warn">
+                  SOFTWARE WEBGL — ENABLE DISCRETE GPU IN WINDOWS GRAPHICS SETTINGS
+                </div>
+              ) : (
+                <div className="sysmon-row sysmon-nogpu">
+                  WEBGL {clientGpu.webgl2 ? '2' : '1'} · HARDWARE ACCELERATED
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="sysmon-row sysmon-nogpu">INITIALIZING GPU…</div>
+          )}
+
+          {showServerNvml ? (
+            <>
+              <SectionLabel>HOST · NVML</SectionLabel>
+              <Bar label="GPU" value={serverGpu.util_percent} detail="load" />
+              <Bar
+                label="VRAM"
+                value={serverGpu.vram_percent != null ? Math.round(serverGpu.vram_percent) : null}
+                detail={`${serverGpu.vram_used_gb}/${serverGpu.vram_total_gb} GB`}
+              />
+              <div className="sysmon-row sysmon-inline">
+                <span>
+                  <span className="sysmon-label">TEMP </span>
+                  <span className="sysmon-value" style={{ color: loadColor(serverGpu.temp_c) }}>
+                    {serverGpu.temp_c}°C
+                  </span>
+                </span>
+                <span>
+                  <span className="sysmon-label">PWR </span>
+                  <span className="sysmon-value">
+                    {serverGpu.power_w != null ? `${serverGpu.power_w}W` : '—'}
+                    {serverGpu.power_limit_w != null && (
+                      <span className="sysmon-detail">/{Math.round(serverGpu.power_limit_w)}W</span>
+                    )}
+                  </span>
+                </span>
+              </div>
+              {specs?.gpu && (
+                <div className="sysmon-specline" title={`Driver ${specs.gpu.driver}`}>
+                  {specs.gpu.name}
+                </div>
+              )}
+            </>
+          ) : remoteBackend ? (
+            <div className="sysmon-row sysmon-nogpu">
+              GPU LOAD/VRAM NEED LOCAL BACKEND — 3D RENDER USES YOUR GPU ABOVE
+            </div>
+          ) : (
+            <div className="sysmon-row sysmon-nogpu">
+              {offline ? 'BACKEND OFFLINE' : 'NO NVIDIA GPU ON BACKEND HOST'}
+            </div>
+          )}
+
+          <SectionLabel>{remoteBackend ? 'BACKEND · CLOUD' : 'HOST · CPU/RAM'}</SectionLabel>
           <Bar
             label="CPU"
             value={stats?.cpu_percent != null ? Math.round(stats.cpu_percent) : null}
@@ -133,42 +200,6 @@ export default function SystemMonitor() {
             value={stats?.ram_percent != null ? Math.round(stats.ram_percent) : null}
             detail={stats ? `${stats.ram_used_gb}/${stats.ram_total_gb} GB` : ''}
           />
-          {gpu ? (
-            <>
-              <Bar label="GPU" value={gpu.util_percent} detail="RTX load" />
-              <Bar
-                label="VRAM"
-                value={gpu.vram_percent != null ? Math.round(gpu.vram_percent) : null}
-                detail={`${gpu.vram_used_gb}/${gpu.vram_total_gb} GB`}
-              />
-              <div className="sysmon-row sysmon-inline">
-                <span>
-                  <span className="sysmon-label">TEMP </span>
-                  <span className="sysmon-value" style={{ color: loadColor(gpu.temp_c) }}>
-                    {gpu.temp_c}°C
-                  </span>
-                </span>
-                <span>
-                  <span className="sysmon-label">PWR </span>
-                  <span className="sysmon-value">
-                    {gpu.power_w != null ? `${gpu.power_w}W` : '—'}
-                    {gpu.power_limit_w != null && (
-                      <span className="sysmon-detail">/{Math.round(gpu.power_limit_w)}W</span>
-                    )}
-                  </span>
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="sysmon-row sysmon-nogpu">
-              {offline ? 'BACKEND OFFLINE — GPU TELEMETRY UNAVAILABLE' : 'NO NVIDIA GPU DETECTED'}
-            </div>
-          )}
-          {specs?.gpu && (
-            <div className="sysmon-specline" title={`Driver ${specs.gpu.driver}`}>
-              {specs.gpu.name}
-            </div>
-          )}
         </div>
       )}
     </aside>

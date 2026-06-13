@@ -316,7 +316,7 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, flying
  * upgrades to real LROC/LOLA textures when the backend serves them.
  * Clicking a site flies the camera in, then calls onSiteSelected(site).
  */
-export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected, flyToMission }) {
+export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected, flyToMission, onGlReady }) {
   const [flight, setFlight] = useState(null);
   const pendingSite = useRef(null);
 
@@ -350,6 +350,9 @@ export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected
           toneMappingExposure: 1.05,
         }}
         dpr={[1, 2]}
+        onCreated={({ gl }) => {
+          if (onGlReady) onGlReady(gl);
+        }}
       >
         <color attach="background" args={['#040408']} />
         <GlobeScene

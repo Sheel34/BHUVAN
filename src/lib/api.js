@@ -19,6 +19,16 @@ function _fbmNoise(nx, ny, octaves = 5) {
 
 export const API_BASE = (import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000').replace(/\/+$/, '');
 
+/** True when the API runs on this machine (NVML can read the local NVIDIA GPU). */
+export function isLocalBackend() {
+  try {
+    const { hostname } = new URL(API_BASE);
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 const API_V1 = `${API_BASE}/api/v1`;
 
 
