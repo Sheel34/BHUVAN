@@ -236,14 +236,18 @@ from jobs.routes import router as jobs_router  # noqa: E402 — needs OUTPUT_DIR
 
 app.include_router(jobs_router)
 
+# Dev defaults plus any production origins supplied via env
+# (BHUVAN_CORS_ORIGINS="https://app.example.com,https://www.example.com").
+_DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+_env_origins = [o.strip() for o in os.environ.get("BHUVAN_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_DEFAULT_ORIGINS + _env_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
