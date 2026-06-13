@@ -21,7 +21,7 @@ ARTIFACT_ROUTE = "/artifacts"
 LAYER_KEYS = ("slope", "roughness", "curvature", "shadow", "hazard", "traversability")
 
 # Bound disk usage: keep the newest N job directories.
-KEEP_JOB_DIRS = int(os.environ.get("ARES_ARTIFACT_KEEP", "32"))
+KEEP_JOB_DIRS = int(os.environ.get("BHUVAN_ARTIFACT_KEEP", "32"))
 
 
 def _evict_old_jobs(output_dir: str) -> None:

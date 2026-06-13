@@ -1,6 +1,6 @@
 """Tests for the async job API (/api/v2/jobs) in eager mode.
 
-Eager mode (ARES_EAGER=1, set in conftest) runs Celery tasks inline; terminal
+Eager mode (BHUVAN_EAGER=1, set in conftest) runs Celery tasks inline; terminal
 job state lives on disk, exactly as it does when a real worker writes it.
 """
 

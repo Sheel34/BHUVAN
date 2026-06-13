@@ -1,4 +1,4 @@
-"""API contract tests for the ARES terrain backend.
+"""API contract tests for the BHUVAN terrain backend.
 
 Covers the four frontend-facing endpoints and guards the raw-array layer
 contract (terrain.data + six flat float layers) that src/lib/api.js and

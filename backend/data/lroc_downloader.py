@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 SVS_MOON_KIT_BASE = "https://svs.gsfc.nasa.gov/vis/a000000/a004700/a004720"
 
 DATA_CACHE_DIR = Path(os.environ.get(
-    "ARES_MOON_CACHE",
+    "BHUVAN_MOON_CACHE",
     Path(__file__).resolve().parent.parent.parent / "data_cache" / "moon"
 ))
 
@@ -169,7 +169,7 @@ def _http_download(
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = dest.with_suffix(dest.suffix + ".part")
 
-    request = urllib.request.Request(url, headers={"User-Agent": "ares-terrain-intel/1.0"})
+    request = urllib.request.Request(url, headers={"User-Agent": "bhuvan-terrain-intel/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             total_bytes = int(response.headers.get("Content-Length", 0))
@@ -390,7 +390,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
     print(f"\n{'='*70}")
-    print("ARES Terrain Intel -- Lunar Asset Catalog")
+    print("BHUVAN -- Lunar Asset Catalog")
     print(f"{'='*70}\n")
 
     print("Globe textures (CGI Moon Kit):")

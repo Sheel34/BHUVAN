@@ -13,9 +13,9 @@ services:
       # Set to the deployed frontend origin, e.g. https://bhuvan.vercel.app
       - key: BHUVAN_CORS_ORIGINS
         sync: false
-      - key: ARES_WORKSPACE_DB
+      - key: BHUVAN_WORKSPACE_DB
         value: /data/workspace.db
-      - key: ARES_MOON_CACHE
+      - key: BHUVAN_MOON_CACHE
         value: /data/moon
     disk:
       name: bhuvan-data

@@ -35,7 +35,7 @@ HIRISE_S3_REGION = "us-west-2"
 
 # Local cache directory for downloaded DTMs
 DATA_CACHE_DIR = Path(os.environ.get(
-    "ARES_DATA_CACHE",
+    "BHUVAN_DATA_CACHE",
     Path(__file__).resolve().parent.parent.parent / "data_cache" / "hirise"
 ))
 
@@ -343,7 +343,7 @@ if __name__ == "__main__":
 
     catalog = list_curated_dtms()
     print(f"\n{'='*70}")
-    print(f"ARES Terrain Intel -- HiRISE DTM Catalog ({len(catalog)} entries)")
+    print(f"BHUVAN -- HiRISE DTM Catalog ({len(catalog)} entries)")
     print(f"{'='*70}")
     for dtm in catalog:
         status = "CACHED" if dtm["cached"] else "NOT DOWNLOADED"

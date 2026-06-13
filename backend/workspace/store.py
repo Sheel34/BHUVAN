@@ -23,7 +23,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DB_PATH = Path(os.environ.get(
-    "ARES_WORKSPACE_DB",
+    "BHUVAN_WORKSPACE_DB",
     Path(__file__).resolve().parent.parent / "workspace.db",
 ))
 

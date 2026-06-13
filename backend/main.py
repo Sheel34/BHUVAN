@@ -27,7 +27,7 @@ from pipeline.terrain_analysis import analyze_terrain
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_DIR = os.environ.get("ARES_OUTPUT_DIR", os.path.join(BASE_DIR, "outputs"))
+OUTPUT_DIR = os.environ.get("BHUVAN_OUTPUT_DIR", os.path.join(BASE_DIR, "outputs"))
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 API_VERSION = "1.1"

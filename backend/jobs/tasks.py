@@ -67,7 +67,7 @@ def _resolve_elevation(spec: dict):
     raise ValueError(f"Unknown job kind: {spec.get('kind')!r}")
 
 
-@celery_app.task(bind=True, name="ares.analyze")
+@celery_app.task(bind=True, name="bhuvan.analyze")
 def analyze_job(self, spec: dict) -> dict:
     import main as backend_main
 

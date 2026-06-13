@@ -1,7 +1,7 @@
 """Celery application for async terrain analysis jobs.
 
-Broker/result backend: Redis (``ARES_REDIS_URL``, default local).
-Dev/test mode: set ``ARES_EAGER=1`` to run tasks inline without Redis —
+Broker/result backend: Redis (``BHUVAN_REDIS_URL``, default local).
+Dev/test mode: set ``BHUVAN_EAGER=1`` to run tasks inline without Redis —
 terminal job state is persisted to disk (result.json / error.json), so the
 status endpoint works identically in both modes.
 
@@ -15,10 +15,10 @@ import os
 
 from celery import Celery
 
-REDIS_URL = os.environ.get("ARES_REDIS_URL", "redis://127.0.0.1:6379/0")
-EAGER = os.environ.get("ARES_EAGER", "0") == "1"
+REDIS_URL = os.environ.get("BHUVAN_REDIS_URL", "redis://127.0.0.1:6379/0")
+EAGER = os.environ.get("BHUVAN_EAGER", "0") == "1"
 
-celery_app = Celery("ares", broker=REDIS_URL, backend=REDIS_URL, include=["jobs.tasks"])
+celery_app = Celery("bhuvan", broker=REDIS_URL, backend=REDIS_URL, include=["jobs.tasks"])
 celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,

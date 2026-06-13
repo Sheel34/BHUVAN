@@ -9,4 +9,4 @@ if BACKEND_DIR not in sys.path:
 
 # Run Celery tasks inline — no Redis required for the test suite.
 # Must be set before jobs.celery_app is imported.
-os.environ.setdefault("ARES_EAGER", "1")
+os.environ.setdefault("BHUVAN_EAGER", "1")

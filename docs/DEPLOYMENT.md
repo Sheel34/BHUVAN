@@ -19,9 +19,9 @@ queue, so the app boots and works without it.
 3. (Optional) Add the **Redis** plugin to the project.
 4. Service → Variables:
    - `BHUVAN_CORS_ORIGINS` = your Vercel URL (e.g. `https://bhuvan.vercel.app`)
-   - `ARES_WORKSPACE_DB` = `/data/workspace.db`  *(add a Volume mounted at `/data`)*
-   - `ARES_MOON_CACHE` = `/data/moon`
-   - `ARES_REDIS_URL` = `${{Redis.REDIS_URL}}`  *(only if Redis plugin added)*
+   - `BHUVAN_WORKSPACE_DB` = `/data/workspace.db`  *(add a Volume mounted at `/data`)*
+   - `BHUVAN_MOON_CACHE` = `/data/moon`
+   - `BHUVAN_REDIS_URL` = `${{Redis.REDIS_URL}}`  *(only if Redis plugin added)*
 5. Deploy → confirm `GET /health` → `{"status":"ok"}`.
 6. Warm globe textures once: `POST /api/v1/moon/textures/download`.
 
@@ -68,8 +68,8 @@ VITE_API_BASE=https://bhuvan-api.onrender.com
 ### Backend (host env vars)
 ```
 BHUVAN_CORS_ORIGINS=https://bhuvan.vercel.app   # comma-separated for multiple
-ARES_WORKSPACE_DB=/data/workspace.db            # persistent disk path
-ARES_MOON_CACHE=/data/moon                      # texture cache on persistent disk
+BHUVAN_WORKSPACE_DB=/data/workspace.db            # persistent disk path
+BHUVAN_MOON_CACHE=/data/moon                      # texture cache on persistent disk
 ```
 
 ---
@@ -105,7 +105,7 @@ CPU-only requirements install (no torch line needed — it's commented out).
 - [x] CORS reads production origins from `BHUVAN_CORS_ORIGINS`
 - [ ] `VITE_API_BASE` set in frontend host to the live backend URL
 - [ ] `BHUVAN_CORS_ORIGINS` set in backend host to the live frontend URL
-- [ ] Persistent disk attached; `ARES_WORKSPACE_DB` / `ARES_MOON_CACHE` point to it
+- [ ] Persistent disk attached; `BHUVAN_WORKSPACE_DB` / `BHUVAN_MOON_CACHE` point to it
 - [ ] `output/`, `data_cache/`, `workspace.db`, venvs confirmed git-ignored
 - [ ] Secrets: none required today (no auth/keys) — confirm before adding any
 

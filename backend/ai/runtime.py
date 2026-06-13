@@ -4,7 +4,7 @@ The web backend must work on machines without PyTorch or a trained
 checkpoint, so everything torch-related is imported lazily and the API
 asks ``model_available()`` before promising AI enhancement.
 
-Checkpoint path: ``ARES_GAN_CHECKPOINT`` env var, default
+Checkpoint path: ``BHUVAN_GAN_CHECKPOINT`` env var, default
 ``backend/checkpoints/terrain_gan_final.pt`` (produced by ai.train).
 """
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CHECKPOINT_PATH = os.environ.get(
-    "ARES_GAN_CHECKPOINT",
+    "BHUVAN_GAN_CHECKPOINT",
     os.path.join(_BACKEND_DIR, "checkpoints", "terrain_gan_final.pt"),
 )
 

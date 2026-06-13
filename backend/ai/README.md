@@ -52,7 +52,7 @@ Checkpoints land in `checkpoints/terrain_gan_*.pt`; history in
 ## 3. Deploy
 
 The runtime looks for `checkpoints/terrain_gan_final.pt` (override with
-`ARES_GAN_CHECKPOINT`). Once present:
+`BHUVAN_GAN_CHECKPOINT`). Once present:
 
 - `POST /api/v1/analyze {"sample": ..., "ai_enhance": true}` — sync
 - `POST /api/v2/jobs {"sample": ..., "ai_enhance": true}` — async (GPU work
