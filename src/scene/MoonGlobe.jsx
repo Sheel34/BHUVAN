@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Html } from '@react-three/drei';
+import { Stars, Html, OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { MOON_SITES, latLonToVec3 } from '../lib/moonSites';
@@ -174,9 +174,10 @@ function SiteMarker({ site, moonGroupRef, hovered, onHover, onSelect, flying }) 
   );
 }
 
-/* ── Camera: cursor drift at rest, eased fly-to on site select ── */
-function GlobeCameraRig({ flight, onFlightDone }) {
-  const { camera, pointer } = useThree();
+/* ── Eased fly-to on site select. Disables orbit during flight, then
+   hands control back centered on the globe. ── */
+function FlyController({ flight, onFlightDone, controlsRef }) {
+  const { camera } = useThree();
   const flightState = useRef(null);
 
   useEffect(() => {
@@ -184,42 +185,35 @@ function GlobeCameraRig({ flight, onFlightDone }) {
       flightState.current = null;
       return;
     }
+    if (controlsRef.current) controlsRef.current.enabled = false;
     flightState.current = {
       from: camera.position.clone(),
       to: flight.cameraTarget.clone(),
       t: 0,
     };
-  }, [flight, camera]);
+  }, [flight, camera, controlsRef]);
 
   useFrame((_, dt) => {
     const fs = flightState.current;
-    if (fs) {
-      fs.t = Math.min(1, fs.t + dt / FLY_DURATION);
-      const k = easeInOutCubic(fs.t);
-      // Arc the path outward slightly so the camera sweeps, not tunnels
-      const mid = fs.from.clone().lerp(fs.to, 0.5).normalize()
-        .multiplyScalar(Math.max(fs.from.length(), fs.to.length()) * 1.12);
-      const a = fs.from.clone().lerp(mid, k);
-      const b = mid.clone().lerp(fs.to, k);
-      camera.position.copy(a.lerp(b, k));
-      camera.lookAt(0, 0, 0);
-      if (fs.t >= 1) {
-        flightState.current = null;
-        onFlightDone();
-      }
-      return;
-    }
-
-    // Idle: Apple-subtle cursor drift around the home position
-    const driftX = pointer.x * 0.35;
-    const driftY = pointer.y * 0.22;
-    const target = new THREE.Vector3(
-      CAMERA_HOME.x + driftX,
-      CAMERA_HOME.y + driftY,
-      CAMERA_HOME.z
-    );
-    camera.position.lerp(target, Math.min(1, 1.8 * dt));
+    if (!fs) return;
+    fs.t = Math.min(1, fs.t + dt / FLY_DURATION);
+    const k = easeInOutCubic(fs.t);
+    // Arc the path outward slightly so the camera sweeps, not tunnels
+    const mid = fs.from.clone().lerp(fs.to, 0.5).normalize()
+      .multiplyScalar(Math.max(fs.from.length(), fs.to.length()) * 1.12);
+    const a = fs.from.clone().lerp(mid, k);
+    const b = mid.clone().lerp(fs.to, k);
+    camera.position.copy(a.lerp(b, k));
     camera.lookAt(0, 0, 0);
+    if (fs.t >= 1) {
+      flightState.current = null;
+      if (controlsRef.current) {
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.enabled = true;
+        controlsRef.current.update();
+      }
+      onFlightDone();
+    }
   });
 
   return null;
@@ -251,6 +245,7 @@ function Sun() {
 
 function GlobeScene({ textureUrls, flight, onFlightDone, onSelectSite, flying }) {
   const moonGroupRef = useRef();
+  const controlsRef = useRef();
   const [hoveredSite, setHoveredSite] = useState(null);
   const textures = useMoonTextures(textureUrls);
 
@@ -274,7 +269,19 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectSite, flying })
           />
         ))}
       </group>
-      <GlobeCameraRig flight={flight} onFlightDone={onFlightDone} />
+      {/* Drag to orbit the Moon; zoom limited so it never leaves the frame. */}
+      <OrbitControls
+        ref={controlsRef}
+        makeDefault
+        enablePan={false}
+        enableDamping
+        dampingFactor={0.08}
+        rotateSpeed={0.42}
+        zoomSpeed={0.6}
+        minDistance={MOON_RADIUS * 1.8}
+        maxDistance={MOON_RADIUS * 5.5}
+      />
+      <FlyController flight={flight} onFlightDone={onFlightDone} controlsRef={controlsRef} />
       <EffectComposer multisampling={4}>
         <Bloom intensity={0.32} luminanceThreshold={0.28} luminanceSmoothing={0.7} mipmapBlur />
         <Vignette eskil={false} offset={0.18} darkness={0.78} />

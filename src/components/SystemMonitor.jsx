@@ -3,10 +3,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000';
 const POLL_MS = 1000;
 
+// Calm by default — steel for normal load, warm only when genuinely high.
 function loadColor(pct) {
   if (pct == null) return 'var(--text-dim)';
-  if (pct < 50) return 'var(--accent-green)';
-  if (pct < 80) return 'var(--accent-orange)';
+  if (pct < 65) return '#93a4c4';
+  if (pct < 85) return 'var(--accent-orange)';
   return 'var(--accent-red)';
 }
 
@@ -112,9 +113,7 @@ export default function SystemMonitor() {
           SYSTEM
           {offline && <span className="sysmon-offline"> · OFFLINE</span>}
         </span>
-        <span className="sysmon-fps" style={{ color: loadColor(100 - fps) }}>
-          {fps} FPS
-        </span>
+        <span className="sysmon-fps">{fps} FPS</span>
         <div className="sysmon-controls">
           <button onClick={() => setCollapsed((c) => !c)} title={collapsed ? 'Expand' : 'Collapse'}>
             {collapsed ? '▸' : '▾'}

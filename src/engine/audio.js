@@ -90,7 +90,14 @@ export function toggleMute() {
   } catch {
     // private mode — non-persistent mute is fine
   }
-  if (uiMuted) window.speechSynthesis?.cancel();
+  if (uiMuted) {
+    // Mute means silence: kill ambience + any speech, not just UI cues.
+    window.speechSynthesis?.cancel();
+    stopWind();
+  } else {
+    resumeAudio();
+    startWind();
+  }
   return uiMuted;
 }
 

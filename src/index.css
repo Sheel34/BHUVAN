@@ -708,16 +708,16 @@ html, body, #root {
 
 .hud-zone-card:hover { background: rgba(255,255,255,0.06); }
 .hud-zone-card.active {
-  border-color: var(--accent-green);
-  background: rgba(52, 211, 153, 0.08);
+  border-color: rgba(147, 164, 196, 0.55);
+  background: rgba(147, 164, 196, 0.1);
 }
 
 .zone-rank { font-size: 0.8rem; font-weight: 800; color: var(--text-dim); }
-.hud-zone-card.active .zone-rank { color: var(--accent-green); }
+.hud-zone-card.active .zone-rank { color: var(--text-primary); }
 
 .zone-info { flex: 1; display: flex; justify-content: space-between; align-items: baseline; }
-.zone-class { font-size: 0.6rem; letter-spacing: 0.1em; }
-.zone-score { font-weight: 700; color: var(--accent-green); }
+.zone-class { font-size: 0.6rem; letter-spacing: 0.1em; color: var(--text-dim); }
+.zone-score { font-weight: 700; color: var(--text-primary); }
 
 .hud-status-message {
   margin-top: 12px;
@@ -1318,14 +1318,19 @@ html, body, #root {
   width: 232px;
   z-index: 40;
   font-family: var(--font-mono);
-  background: rgba(8, 10, 18, 0.72);
-  border: 1px solid rgba(140, 160, 200, 0.16);
+  background: rgba(11, 12, 15, 0.82);
+  border: 1px solid rgba(147, 164, 196, 0.1);
   border-radius: 12px;
   backdrop-filter: blur(16px);
   overflow: hidden;
-  pointer-events: auto;
+  /* Non-interactive readout must NOT block clicks on controls beneath it;
+     only the header (collapse/close) re-enables pointer events. */
+  pointer-events: none;
   animation: globe-fade-in 0.5s ease both;
 }
+
+.sysmon-header,
+.sysmon-controls button { pointer-events: auto; }
 
 .sysmon.collapsed { width: 178px; }
 
@@ -1348,7 +1353,7 @@ html, body, #root {
 
 .sysmon-offline { color: var(--accent-orange); }
 
-.sysmon-fps { font-size: 10px; font-weight: 700; }
+.sysmon-fps { font-size: 10px; font-weight: 700; color: #93a4c4; }
 
 .sysmon-controls { display: flex; gap: 2px; }
 

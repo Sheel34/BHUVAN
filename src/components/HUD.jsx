@@ -111,10 +111,12 @@ export default function HUD({
             <span className="hud-logo">BHUVAN</span>
             <span className="hud-version">PLANETARY INTELLIGENCE</span>
           </div>
-          <div className={`hud-conn-indicator ${backendMode}`}>
-            <span className="conn-dot" />
-            {backendMode === 'online' ? 'LIVE' : backendMode === 'error' ? 'OFFLINE' : '…'}
-          </div>
+          {backendMode !== 'online' && (
+            <div className={`hud-conn-indicator ${backendMode}`}>
+              <span className="conn-dot" />
+              {backendMode === 'error' ? 'OFFLINE' : '…'}
+            </div>
+          )}
         </div>
 
         <div className="hud-top-center">
