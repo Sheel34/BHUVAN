@@ -5,6 +5,7 @@ import GlobeOverlay from './components/GlobeOverlay';
 import MissionDossier from './components/MissionDossier';
 import ReportModal from './components/ReportModal';
 import SystemMonitor from './components/SystemMonitor';
+import SceneErrorBoundary from './components/SceneErrorBoundary';
 import SceneCanvas from './scene/SceneCanvas';
 import MoonGlobe from './scene/MoonGlobe';
 import { inspectTerrainPoint } from './engine/terrain';
@@ -19,7 +20,9 @@ import { surfaceSampleFor } from './lib/lunarMissions';
 import { resumeAudio, startWind, stopAll } from './engine/audio';
 import { readWebGLGpu } from './lib/clientGpu';
 
-const DEFAULT_VIEW = 'hazard';
+// Default to the photoreal regolith surface, not the hazard heatmap — the
+// data layers are one toggle away in the HUD.
+const DEFAULT_VIEW = 'surface';
 
 export default function App() {
   const [phase, setPhase] = useState('globe');
@@ -209,13 +212,15 @@ export default function App() {
   if (phase === 'globe') {
     return (
       <div className="simulation-root">
-        <MoonGlobe
-          textureUrls={moonTextures}
-          onMissionSelect={setSelectedMission}
-          onSiteSelected={handleGlobeSiteSelected}
-          flyToMission={flyToMission}
-          onGlReady={handleGlReady}
-        />
+        <SceneErrorBoundary>
+          <MoonGlobe
+            textureUrls={moonTextures}
+            onMissionSelect={setSelectedMission}
+            onSiteSelected={handleGlobeSiteSelected}
+            flyToMission={flyToMission}
+            onGlReady={handleGlReady}
+          />
+        </SceneErrorBoundary>
         <SystemMonitor clientGpu={clientGpu} />
         <GlobeOverlay
           analysisStatus={analysisStatus}
@@ -235,18 +240,20 @@ export default function App() {
 
   return (
     <div className="simulation-root">
-      <SceneCanvas
-        analysis={analysis}
-        viewMode={viewMode}
-        landingTarget={landingTarget}
-        landingTargetHazard={landingTargetHazard}
-        inspectedPoint={inspectedPoint}
-        focusPoint={focusPoint}
-        interestRegions={analysis?.intelligence?.interest_regions || []}
-        onInspectPoint={handleInspectPoint}
-        debugMode={debugMode}
-        onGlReady={handleGlReady}
-      />
+      <SceneErrorBoundary>
+        <SceneCanvas
+          analysis={analysis}
+          viewMode={viewMode}
+          landingTarget={landingTarget}
+          landingTargetHazard={landingTargetHazard}
+          inspectedPoint={inspectedPoint}
+          focusPoint={focusPoint}
+          interestRegions={analysis?.intelligence?.interest_regions || []}
+          onInspectPoint={handleInspectPoint}
+          debugMode={debugMode}
+          onGlReady={handleGlReady}
+        />
+      </SceneErrorBoundary>
       <pre id="perf-stats" className="perf-stats" />
       <SystemMonitor clientGpu={clientGpu} />
       <HUD

@@ -253,9 +253,14 @@ _DEFAULT_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 _env_origins = [o.strip() for o in os.environ.get("BHUVAN_CORS_ORIGINS", "").split(",") if o.strip()]
+# Any Vercel deployment of this project (bhuvanspace, bhuvan-terrain, preview
+# URLs, …) is allowed without re-deploying the backend on every domain rename.
+# Custom (non-vercel.app) domains must still be added via BHUVAN_CORS_ORIGINS.
+_VERCEL_ORIGIN_REGEX = r"https://([a-z0-9-]+\.)*vercel\.app"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_DEFAULT_ORIGINS + _env_origins,
+    allow_origin_regex=_VERCEL_ORIGIN_REGEX,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],

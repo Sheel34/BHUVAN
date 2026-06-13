@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, Html, OrbitControls } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { latLonToVec3 } from '../lib/moonSites';
+import { latLonToVec3, vec3ToLatLon, sampleIdForLat, generateExplorationGrid } from '../lib/moonSites';
 import { LUNAR_MISSIONS, MISSION_TYPE_STYLE } from '../lib/lunarMissions';
 import { createProceduralMoonTextures } from './proceduralMoon';
 
@@ -58,9 +58,11 @@ function useMoonTextures(textureUrls) {
   return textures;
 }
 
-/* ── The Moon itself: displaced, bump-lit sphere ── */
-function Moon({ textures, groupRef, spinning }) {
+/* ── The Moon itself: displaced, bump-lit sphere. Clicking any point on
+   the surface (a click, not a drag) flies in and surveys that spot. ── */
+function Moon({ textures, groupRef, spinning, onSurfaceClick }) {
   const spinPaused = useRef(false);
+  const downRef = useRef(null);
 
   useFrame((_, dt) => {
     if (!groupRef.current) return;
@@ -69,12 +71,25 @@ function Moon({ textures, groupRef, spinning }) {
     }
   });
 
+  const handleDown = (e) => {
+    spinPaused.current = true;
+    downRef.current = { x: e.nativeEvent?.clientX ?? 0, y: e.nativeEvent?.clientY ?? 0 };
+  };
+  const handleUp = (e) => {
+    spinPaused.current = false;
+    const d = downRef.current;
+    downRef.current = null;
+    if (!d || !onSurfaceClick || !e.point) return;
+    // Distinguish a click from an orbit-drag so rotating never triggers a survey.
+    const dx = (e.nativeEvent?.clientX ?? 0) - d.x;
+    const dy = (e.nativeEvent?.clientY ?? 0) - d.y;
+    if (Math.hypot(dx, dy) > 7) return;
+    onSurfaceClick(e.point);
+  };
+
   return (
     <group ref={groupRef}>
-      <mesh
-        onPointerDown={() => { spinPaused.current = true; }}
-        onPointerUp={() => { spinPaused.current = false; }}
-      >
+      <mesh onPointerDown={handleDown} onPointerUp={handleUp}>
         <sphereGeometry args={[MOON_RADIUS, 384, 192]} />
         <meshStandardMaterial
           map={textures.color}
@@ -150,33 +165,47 @@ function MissionMarker({ mission, moonGroupRef, hovered, onHover, onSelect, flyi
     <group ref={markerRef}>
       {/* radial stalk */}
       <mesh position={surfacePos} quaternion={quat}>
-        <cylinderGeometry args={[0.006, 0.006, MOON_RADIUS * 0.07, 6]} />
-        <meshBasicMaterial color={style.color} transparent opacity={0.7} toneMapped={false} />
+        <cylinderGeometry args={[0.009, 0.009, MOON_RADIUS * 0.09, 6]} />
+        <meshBasicMaterial color={style.color} transparent opacity={0.9} toneMapped={false} />
       </mesh>
       {/* head */}
       <group position={tip.toArray()}>
-        {/* large invisible hit target — small dots are hard to click */}
+        {/* large invisible hit target — small dots are hard to click. Stops
+            pointer events so a marker click never also surveys the surface. */}
         <mesh
           onPointerOver={(e) => { e.stopPropagation(); if (!flying) onHover(mission.id); }}
           onPointerOut={(e) => { e.stopPropagation(); onHover(null); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); if (!flying) onSelect(mission); }}
         >
-          <sphereGeometry args={[0.11, 12, 12]} />
+          <sphereGeometry args={[0.13, 12, 12]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
-        {/* subtle halo — only really shows on hover */}
+        {/* outer glow — always visible so markers read at a glance */}
+        <mesh>
+          <sphereGeometry args={[0.085, 16, 16]} />
+          <meshBasicMaterial
+            color={style.color}
+            transparent
+            opacity={hovered ? 0.45 : 0.22}
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
+        {/* inner halo */}
         <mesh>
           <sphereGeometry args={[0.055, 16, 16]} />
           <meshBasicMaterial
             color={style.color}
             transparent
-            opacity={hovered ? 0.3 : 0.1}
+            opacity={hovered ? 0.7 : 0.4}
             toneMapped={false}
             depthWrite={false}
           />
         </mesh>
         <mesh ref={dotRef}>
-          <sphereGeometry args={[0.028, 16, 16]} />
+          <sphereGeometry args={[0.05, 16, 16]} />
           <meshBasicMaterial color={hovered ? '#ffffff' : style.color} toneMapped={false} />
         </mesh>
         {hovered && !flying && (
@@ -188,6 +217,44 @@ function MissionMarker({ mission, moonGroupRef, hovered, onHover, onSelect, flyi
           </Html>
         )}
       </group>
+    </group>
+  );
+}
+
+/* ── Exploration node: one of many evenly-scattered clickable survey
+   points so the whole globe reads as explorable, not just the missions. ── */
+function ExplorationMarker({ site, onSelect, flying }) {
+  const groupRef = useRef();
+  const dotRef = useRef();
+  const pos = useMemo(() => latLonToVec3(site.lat, site.lon, MOON_RADIUS * 1.004), [site]);
+
+  useFrame(({ camera, clock }) => {
+    if (!groupRef.current) return;
+    const wp = groupRef.current.getWorldPosition(new THREE.Vector3());
+    const facing = wp.clone().normalize().dot(camera.position.clone().sub(wp).normalize());
+    groupRef.current.visible = facing > 0.06;
+    if (dotRef.current) {
+      dotRef.current.material.opacity = 0.45 + Math.sin(clock.elapsedTime * 1.6 + site.lat) * 0.18;
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={pos}>
+      {/* invisible hit target */}
+      <mesh
+        onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer'; }}
+        onPointerOut={(e) => { e.stopPropagation(); document.body.style.cursor = ''; }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onPointerUp={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); if (!flying) onSelect(site); }}
+      >
+        <sphereGeometry args={[0.07, 10, 10]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh ref={dotRef}>
+        <sphereGeometry args={[0.018, 10, 10]} />
+        <meshBasicMaterial color="#7fd8ff" transparent opacity={0.5} toneMapped={false} depthWrite={false} />
+      </mesh>
     </group>
   );
 }
@@ -256,16 +323,17 @@ function Sun() {
   return (
     <>
       <directionalLight ref={lightRef} intensity={2.6} color="#fff4e6" />
-      <ambientLight intensity={0.06} color="#334466" />
+      <ambientLight intensity={0.13} color="#3a4a66" />
     </>
   );
 }
 
-function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, flying }) {
+function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, onSurfaceClick, onSurfaceSelect, flying }) {
   const moonGroupRef = useRef();
   const controlsRef = useRef();
   const [hoveredSite, setHoveredSite] = useState(null);
   const textures = useMoonTextures(textureUrls);
+  const explorationSites = useMemo(() => generateExplorationGrid(60), []);
 
   if (!textures) return null;
 
@@ -276,7 +344,13 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, flying
       {/* No idle spin: markers are pinned to fixed lat/lon in world space,
           so the sphere must stay static or they'd drift off their sites.
           Rotation is the user's job via OrbitControls. */}
-      <Moon textures={textures} groupRef={moonGroupRef} spinning={false} />
+      <Moon textures={textures} groupRef={moonGroupRef} spinning={false} onSurfaceClick={onSurfaceClick} />
+      {/* Scattered explorable survey nodes — click any to fly in and analyze. */}
+      <group>
+        {explorationSites.map((site) => (
+          <ExplorationMarker key={site.id} site={site} onSelect={onSurfaceSelect} flying={flying} />
+        ))}
+      </group>
       <group>
         {LUNAR_MISSIONS.map((mission) => (
           <MissionMarker
@@ -327,6 +401,12 @@ export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected
     setFlight({ cameraTarget: dir.multiplyScalar(MOON_RADIUS * 1.55) });
   }, []);
 
+  // Click anywhere on the globe → resolve lat/lon → fly in and survey it.
+  const handleSurfaceClick = useCallback((point) => {
+    const { lat, lon } = vec3ToLatLon(point.x, point.y, point.z);
+    handleSelectSite({ id: 'surface', name: 'Surface site', lat, lon, sampleId: sampleIdForLat(lat) });
+  }, [handleSelectSite]);
+
   // App requests a fly-to-and-survey (from the dossier "survey" button).
   useEffect(() => {
     if (flyToMission) handleSelectSite(flyToMission);
@@ -360,6 +440,8 @@ export default function MoonGlobe({ textureUrls, onMissionSelect, onSiteSelected
           flight={flight}
           onFlightDone={handleFlightDone}
           onSelectMission={onMissionSelect}
+          onSurfaceClick={handleSurfaceClick}
+          onSurfaceSelect={handleSelectSite}
           flying={Boolean(flight)}
         />
       </Canvas>

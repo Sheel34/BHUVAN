@@ -371,6 +371,45 @@ html, body, #root {
   background: #000;
 }
 
+/* Fallback when a WebGL scene throws (see SceneErrorBoundary). */
+.scene-error {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 40%, #0d1018, #050608);
+}
+.scene-error-title {
+  font-family: var(--font-mono);
+  letter-spacing: 0.22em;
+  color: var(--accent-orange);
+  font-size: 0.8rem;
+}
+.scene-error-msg {
+  max-width: 520px;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.scene-error-btn {
+  margin-top: 6px;
+  padding: 8px 18px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  color: var(--text-primary);
+  background: rgba(147, 164, 196, 0.12);
+  border: 1px solid rgba(147, 164, 196, 0.35);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.scene-error-btn:hover { border-color: var(--accent-cyan); }
+
 .simulation-root canvas {
   position: absolute !important;
   inset: 0;
@@ -918,49 +957,13 @@ html, body, #root {
 }
 
 @media (max-width: 768px) {
-  .hud-overlay {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
-    overflow-y: auto;
-    padding: 12px;
-    pointer-events: auto;
-  }
+  /* CRITICAL: the overlay must stay click-through so the globe/terrain
+     underneath stays draggable. Only the panels/top-bar capture touch.
+     (A full-screen `pointer-events: auto` overlay here is what blocked all
+     terrain interaction on phones.) */
+  .hud-overlay { pointer-events: none; }
 
-  .hud-top,
-  .hud-left-panel,
-  .hud-right-panel,
-  .hud-analysis-panel,
-  .hud-bottom-actions {
-    position: static;
-    width: auto;
-    max-height: none;
-    margin: 0;
-    padding: 12px;
-    transform: none;
-  }
-
-  .hud-top {
-    order: 0;
-  }
-
-  .hud-left-panel {
-    order: 1;
-  }
-
-  .hud-bottom-actions {
-    order: 2;
-    background: rgba(5, 8, 18, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
-    backdrop-filter: blur(14px);
-  }
-
-  .hud-right-panel {
-    order: 3;
-  }
-
+  .hud-top { padding: 10px 12px; gap: 10px; }
   .hud-right-panel { display: block; }
   .hud-layer-selector { flex-wrap: wrap; }
   .hud-terrain-name { max-width: 100%; }
@@ -1691,9 +1694,10 @@ html, body, #root {
   .hud-top-center { display: none; }
   .hud-left-panel, .hud-right-panel {
     position: absolute;
-    top: 56px;
+    top: 104px;
     bottom: auto;
-    max-height: calc(100vh - 130px);
+    width: min(78vw, 280px);
+    max-height: calc(100vh - 150px);
     z-index: 30;
   }
   .hud-left-panel { left: 8px; }

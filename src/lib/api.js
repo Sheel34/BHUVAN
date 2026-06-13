@@ -259,7 +259,10 @@ export async function analyzeSample(sampleId) {
 
   } catch (err) {
 
-    if (sampleId === 'mars-jezero' || sampleId === 'moon-south-pole') {
+    // Offline / unreachable backend → never dead-end the user. Synthesize a
+    // representative demo surface so ANY clicked site stays explorable.
+
+    if (err.code === 'NETWORK_ERROR' || sampleId.startsWith('moon') || sampleId.startsWith('mars')) {
 
       return generateMockAnalysis(sampleId);
 
@@ -275,9 +278,13 @@ export async function analyzeSample(sampleId) {
 
 function generateMockAnalysis(id) {
 
-  const size = 128;
+  // Larger grid + wider world scale → a big, detailed surface to roam,
+  // not a tiny patch. Chunked LOD keeps it cheap to render.
+  const size = 192;
 
-  const scale = 200;
+  const scale = 320;
+
+  const heightScale = 48;
 
   const data = new Float32Array(size * size);
 
@@ -293,7 +300,7 @@ function generateMockAnalysis(id) {
 
       let h = base;
 
-      if (id === 'moon-south-pole') {
+      if (id.startsWith('moon')) {
 
         const crater = -0.6 * Math.exp(-((nx - 0.5) ** 2 + (ny - 0.5) ** 2) / 0.03);
 
@@ -318,7 +325,7 @@ function generateMockAnalysis(id) {
   const maxH = Math.max(...data);
   const range = maxH - minH || 1;
   for (let i = 0; i < data.length; i++) {
-    data[i] = ((data[i] - minH) / range) * 30;
+    data[i] = ((data[i] - minH) / range) * heightScale;
   }
 
   const slope = new Float32Array(size * size);
@@ -372,17 +379,17 @@ function generateMockAnalysis(id) {
 
     metadata: {
 
-      terrainName: id === 'mars-jezero' ? 'Mars Jezero (PROTOTYPE)' : 'Lunar South Pole (PROTOTYPE)',
+      terrainName: id.startsWith('mars') ? 'Mars Surface (DEMO)' : 'Lunar Surface (DEMO)',
 
       source: 'procedural-fallback',
 
       gridSize: size,
 
-      worldScale: 200,
+      worldScale: scale,
 
-      heightScale: 30,
+      heightScale: heightScale,
 
-      resolutionMPerPx: 1.56,
+      resolutionMPerPx: scale / (size - 1),
 
       safeAreaPct: 82.4,
 
@@ -392,7 +399,7 @@ function generateMockAnalysis(id) {
 
     },
 
-    terrain: { data, size, scale: 200, heightScale: 30, minH: 0, maxH: 30 },
+    terrain: { data, size, scale, heightScale, minH: 0, maxH: heightScale },
 
     layers,
 

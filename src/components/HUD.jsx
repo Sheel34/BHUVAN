@@ -8,6 +8,7 @@ function formatNum(n, decimals = 1) {
 // Color legend per data layer — gives the terrain coloring meaning
 // instead of an unexplained hue change.
 const LAYER_LEGENDS = {
+  surface: { label: 'Surface', gradient: 'linear-gradient(90deg,#4a4a4e,#cfcfd6)', lo: 'dark', hi: 'bright' },
   elevation: { label: 'Elevation', gradient: 'linear-gradient(90deg,#5c5c61,#d2d2d8)', lo: 'low', hi: 'high' },
   slope: { label: 'Slope', gradient: 'linear-gradient(90deg,#3a4be0,#e8553a)', lo: 'flat', hi: 'steep' },
   roughness: { label: 'Roughness', gradient: 'linear-gradient(90deg,#33363b,#cf8a3a)', lo: 'smooth', hi: 'broken' },
@@ -93,8 +94,11 @@ export default function HUD({
   onBackToGlobe,
 }) {
   const [audioMuted, setAudioMuted] = useState(isMuted());
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  // On phones the panels start collapsed so they never cover the terrain;
+  // the user opens them with the edge toggles when needed.
+  const wideScreen = typeof window === 'undefined' || window.innerWidth > 820;
+  const [leftOpen, setLeftOpen] = useState(wideScreen);
+  const [rightOpen, setRightOpen] = useState(wideScreen);
 
   const intel = analysis?.intelligence;
   const safeAreaPct = analysis?.metadata?.safeAreaPct ?? 0;
@@ -127,7 +131,7 @@ export default function HUD({
 
         <div className="hud-top-right">
           <div className="hud-layer-selector">
-            {['elevation', 'slope', 'roughness', 'hazard', 'traversability'].map((m) => (
+            {['surface', 'elevation', 'slope', 'roughness', 'hazard', 'traversability'].map((m) => (
               <button
                 key={m}
                 className={`hud-layer-btn ${viewMode === m ? 'active' : ''}`}
