@@ -6,9 +6,10 @@ import cv2
 import numpy as np
 from PIL import Image, UnidentifiedImageError
 
-import rasterio  # type: ignore
-from rasterio.enums import Resampling  # type: ignore
-from rasterio.errors import RasterioIOError
+# rasterio is imported lazily inside ingest_geotiff(): it links native
+# GDAL/expat libs that may be absent on minimal cloud images. Keeping the
+# import lazy lets the API boot and serve the procedural + image paths even
+# where those system libs aren't installed.
 
 # 512-cell grid over a 2 km patch (~3.9 m/cell) — large-terrain defaults
 # sized for dedicated-GPU rendering via the chunked LOD pipeline.
@@ -141,6 +142,10 @@ def ingest_geotiff(
     path: str,
     target_size: int = 512,
 ) -> tuple[np.ndarray, dict]:
+    import rasterio  # type: ignore
+    from rasterio.enums import Resampling  # type: ignore
+    from rasterio.errors import RasterioIOError
+
     try:
         with rasterio.open(path) as src:
             # Validate CRS

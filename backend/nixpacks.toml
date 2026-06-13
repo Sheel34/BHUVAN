@@ -1,0 +1,7 @@
+# Railway / Nixpacks build config for the BHUVAN backend.
+# rasterio's bundled GDAL links native libs (expat, etc.) that are not in
+# the base image — install them so GeoTIFF + real-DEM ingest works.
+# (The app already boots without these thanks to lazy rasterio imports;
+#  this enables the full geospatial path.)
+[phases.setup]
+aptPkgs = ["libexpat1", "libgl1", "libglib2.0-0"]
