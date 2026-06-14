@@ -45,6 +45,7 @@ export default function App() {
   const [selectedMission, setSelectedMission] = useState(null);
   const [flyToMission, setFlyToMission] = useState(null);
   const [clientGpu, setClientGpu] = useState(null);
+  const [ingressPlaying, setIngressPlaying] = useState(false);
 
   const handleGlReady = useCallback((gl) => {
     setClientGpu(readWebGLGpu(gl));
@@ -254,8 +255,17 @@ export default function App() {
           onInspectPoint={handleInspectPoint}
           debugMode={debugMode}
           onGlReady={handleGlReady}
+          ingressPlaying={ingressPlaying}
+          onIngressDone={() => setIngressPlaying(false)}
         />
       </SceneErrorBoundary>
+      <button
+        className="ingress-btn"
+        onClick={() => setIngressPlaying(true)}
+        disabled={ingressPlaying}
+      >
+        {ingressPlaying ? '◣ INGRESS RUNNING…' : '▶ RUN NAP-OF-EARTH INGRESS'}
+      </button>
       <pre id="perf-stats" className="perf-stats" />
       <SystemMonitor clientGpu={clientGpu} />
       <HUD

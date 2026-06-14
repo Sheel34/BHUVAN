@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
 import Rover from './Rover';
+import Ingress from './Ingress';
 import { getRegolithMaps } from './lunarSurface';
 import { lunarSample, worldHeight } from '../engine/world';
 
@@ -310,6 +311,8 @@ export default function SceneCanvas({
   onInspectPoint,
   debugMode = false,
   onGlReady,
+  ingressPlaying = false,
+  onIngressDone,
 }) {
   const terrain = analysis?.terrain;
   const layers = analysis?.layers;
@@ -387,8 +390,11 @@ export default function SceneCanvas({
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
       </group>
 
-      {/* Drivable rover (WASD) — roams the whole world, tiny for scale. */}
+      {/* Parked digital-twin rover — scale + telemetry. */}
       {terrain && <Rover terrain={terrain} />}
+
+      {/* Nap-of-the-earth ingress: radar-masked route + cinematic fly-through. */}
+      {terrain && <Ingress terrain={terrain} playing={ingressPlaying} onDone={onIngressDone} />}
 
       {landingTarget && (
         <LandingMarker
