@@ -61,7 +61,7 @@ export default function GlobeOverlay({
           <div className="globe-status error">{analysisError}</div>
         ) : (
           <div className="globe-status hint">
-            DRAG TO ROTATE · CLICK ANY POINT TO ZOOM IN & EXPLORE · MARKERS OPEN DOSSIERS
+            DRAG TO CIRCLE THE MOON · SCROLL TO FLY LOW · CLICK ANY POINT TO SURVEY · MARKERS OPEN DOSSIERS
           </div>
         )}
         <div className="globe-source">

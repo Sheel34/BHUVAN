@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { latLonToVec3, vec3ToLatLon, sampleIdForLat, generateExplorationGrid } from '../lib/moonSites';
 import { LUNAR_MISSIONS, MISSION_TYPE_STYLE } from '../lib/lunarMissions';
 import { createProceduralMoonTextures } from './proceduralMoon';
+import { getRegolithMaps } from './lunarSurface';
 
 const MOON_RADIUS = 2;
 // Real lunar relief is ~19.8 km on a 1737 km radius (~1.1%); exaggerate
@@ -64,6 +65,16 @@ function Moon({ textures, groupRef, spinning, onSurfaceClick }) {
   const spinPaused = useRef(false);
   const downRef = useRef(null);
 
+  // Fine regolith grit so the surface holds up when you fly in close —
+  // cloned + tiled so it doesn't disturb the workspace's shared maps.
+  const regolithNormal = useMemo(() => {
+    const n = getRegolithMaps().normal.clone();
+    n.needsUpdate = true;
+    n.wrapS = n.wrapT = THREE.RepeatWrapping;
+    n.repeat.set(18, 9);
+    return n;
+  }, []);
+
   useFrame((_, dt) => {
     if (!groupRef.current) return;
     if (spinning && !spinPaused.current) {
@@ -90,7 +101,7 @@ function Moon({ textures, groupRef, spinning, onSurfaceClick }) {
   return (
     <group ref={groupRef}>
       <mesh onPointerDown={handleDown} onPointerUp={handleUp}>
-        <sphereGeometry args={[MOON_RADIUS, 384, 192]} />
+        <sphereGeometry args={[MOON_RADIUS, 512, 256]} />
         <meshStandardMaterial
           map={textures.color}
           displacementMap={textures.displacement}
@@ -98,7 +109,9 @@ function Moon({ textures, groupRef, spinning, onSurfaceClick }) {
           displacementBias={-DISPLACEMENT_SCALE / 2}
           bumpMap={textures.displacement}
           bumpScale={1.4}
-          roughness={0.96}
+          normalMap={regolithNormal}
+          normalScale={new THREE.Vector2(0.35, 0.35)}
+          roughness={0.97}
           metalness={0.0}
         />
       </mesh>
@@ -323,7 +336,7 @@ function Sun() {
   return (
     <>
       <directionalLight ref={lightRef} intensity={2.6} color="#fff4e6" />
-      <ambientLight intensity={0.13} color="#3a4a66" />
+      <ambientLight intensity={0.22} color="#46506b" />
     </>
   );
 }
@@ -373,8 +386,10 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, onSurf
         dampingFactor={0.08}
         rotateSpeed={0.42}
         zoomSpeed={0.6}
-        minDistance={MOON_RADIUS * 1.8}
-        maxDistance={MOON_RADIUS * 5.5}
+        autoRotate
+        autoRotateSpeed={0.25}
+        minDistance={MOON_RADIUS * 1.16}
+        maxDistance={MOON_RADIUS * 6}
       />
       <FlyController flight={flight} onFlightDone={onFlightDone} controlsRef={controlsRef} />
       <EffectComposer multisampling={4}>
