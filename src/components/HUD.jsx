@@ -191,12 +191,12 @@ export default function HUD({
               <label className="hud-upload-field">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.tif,.tiff,.geotiff"
                   disabled={backendMode !== 'online'}
                   onChange={(e) => onUpload(e.target.files?.[0])}
                 />
                 <span className="hud-upload-label">
-                  {backendMode === 'online' ? 'UPLOAD TERRAIN DATA' : 'REQUIRES BACKEND'}
+                  {backendMode === 'online' ? 'UPLOAD TERRAIN / DEM' : 'REQUIRES BACKEND'}
                 </span>
               </label>
             </div>

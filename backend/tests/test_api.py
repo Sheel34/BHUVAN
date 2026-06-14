@@ -37,6 +37,16 @@ def _make_png_bytes(size: int = 96) -> bytes:
     return buf.getvalue()
 
 
+def _make_vivid_png(size: int = 96) -> bytes:
+    """Saturated colour blocks — a logo/graphic, NOT terrain."""
+    arr = np.zeros((size, size, 3), dtype=np.uint8)
+    arr[:, : size // 2] = (255, 0, 0)
+    arr[:, size // 2 :] = (0, 60, 255)
+    buf = BytesIO()
+    Image.fromarray(arr, mode="RGB").save(buf, format="PNG")
+    return buf.getvalue()
+
+
 def _assert_analysis_payload(payload: dict) -> None:
     size = payload["terrain"]["size"]
     n_cells = size * size
@@ -147,16 +157,37 @@ def test_analyze_upload_png():
     assert response.status_code == 200
     payload = response.json()
     _assert_analysis_payload(payload)
-    assert payload["metadata"]["source"] == "uploaded-image"
+    # Grey heightmap → classified lunar; source is an uploaded-image variant.
+    assert payload["metadata"]["source"].startswith("uploaded-image")
 
 
-def test_analyze_upload_rejects_bad_content_type():
+def test_analyze_upload_accepts_terrain_despite_content_type():
+    # A real terrain image must NOT be rejected on content-type alone.
+    png = _make_png_bytes()
     response = client.post(
         "/api/v1/analyze-upload",
-        files={"file": ("notes.txt", b"not an image at all, just text bytes....", "text/plain")},
+        files={"file": ("dem.bin", png, "application/octet-stream")},
     )
-    assert response.status_code == 415
-    assert response.json()["detail"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.status_code == 200
+    assert response.json()["metadata"]["source"].startswith("uploaded-image")
+
+
+def test_analyze_upload_rejects_non_terrain():
+    response = client.post(
+        "/api/v1/analyze-upload",
+        files={"file": ("logo.png", _make_vivid_png(), "image/png")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "NOT_TERRAIN"
+
+
+def test_analyze_upload_rejects_non_image():
+    response = client.post(
+        "/api/v1/analyze-upload",
+        files={"file": ("notes.txt", b"just text bytes, definitely not an image, padding padding padding", "text/plain")},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INGEST_FAILED"
 
 
 def test_analyze_upload_rejects_tiny_file():

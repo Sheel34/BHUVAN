@@ -580,37 +580,26 @@ def analyze_sample(request: AnalyzeRequest):
 
 @app.post("/api/v1/analyze-upload", response_model=AnalysisPayload)
 async def analyze_upload(file: Annotated[UploadFile, File(...)]):
-    allowed = {"image/png", "image/jpeg", "image/tiff", "image/x-tiff"}
-    ct = (file.content_type or "").lower()
-    if ct not in allowed:
-        raise HTTPException(
-            status_code=415,
-            detail=ErrorDetail(
-                code="UNSUPPORTED_MEDIA_TYPE",
-                message=f"Received '{ct}'. Accepted: {sorted(allowed)}",
-            ).model_dump(),
-        )
-
     content = await file.read()
     if len(content) < 64:
         raise HTTPException(
             status_code=400,
-            detail=ErrorDetail(
-                code="FILE_TOO_SMALL",
-                message="File appears empty.",
-            ).model_dump(),
+            detail=ErrorDetail(code="FILE_TOO_SMALL", message="File appears empty.").model_dump(),
         )
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(
             status_code=413,
-            detail=ErrorDetail(
-                code="FILE_TOO_LARGE",
-                message="Maximum upload is 50 MB.",
-            ).model_dump(),
+            detail=ErrorDetail(code="FILE_TOO_LARGE", message="Maximum upload is 50 MB.").model_dump(),
         )
 
-    try:
-        if ct in {"image/tiff", "image/x-tiff"} or file.filename.lower().endswith((".tif", ".tiff")):
+    ct = (file.content_type or "").lower()
+    filename = (file.filename or "").lower()
+    is_tiff = ct in {"image/tiff", "image/x-tiff"} or filename.endswith((".tif", ".tiff"))
+
+    # ── GeoTIFF: the only path that can load a REAL area — it carries CRS +
+    #    bounds, so the surface is georeferenced to true coordinates. ──
+    if is_tiff:
+        try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
@@ -618,16 +607,51 @@ async def analyze_upload(file: Annotated[UploadFile, File(...)]):
                 elevation, metadata = ingest_geotiff(tmp_path)
             finally:
                 os.remove(tmp_path)
-        else:
-            elevation, metadata = ingest_image_bytes(content)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=ErrorDetail(code="INGEST_FAILED", message=str(exc)).model_dump(),
+            ) from exc
+        return build_payload(elevation, metadata)
+
+    # ── Plain image: accept ANY decodable image (don't gate on content-type,
+    #    which wrongly rejects valid terrain). Classify it; reject only clear
+    #    non-terrain (selfies/logos), then treat as a heightmap. ──
+    from pipeline.classify import classify_terrain_image
+
+    try:
+        verdict = classify_terrain_image(content)
     except ValueError as exc:
         raise HTTPException(
             status_code=422,
-            detail=ErrorDetail(
-                code="INGEST_FAILED",
-                message=str(exc),
-            ).model_dump(),
+            detail=ErrorDetail(code="INGEST_FAILED", message=str(exc)).model_dump(),
         ) from exc
+
+    if not verdict["is_terrain"]:
+        raise HTTPException(
+            status_code=422,
+            detail=ErrorDetail(
+                code="NOT_TERRAIN",
+                message=f"Not a terrain image ({verdict['reason']}). Upload surface/DEM imagery, or a georeferenced GeoTIFF for a real area.",
+            ).model_dump(),
+        )
+
+    elevation, metadata = ingest_image_bytes(content)
+
+    # Label + honest provenance by detected body.
+    if verdict["is_moon"]:
+        metadata["terrain_name"] = "Lunar Upload — surface image"
+        metadata["source"] = "uploaded-image-moon"
+        metadata["disclaimer"] = (
+            "Lunar surface image detected and loaded as a heightmap. Exact "
+            "selenographic location cannot be resolved from a photo — upload a "
+            "georeferenced GeoTIFF for true coordinates."
+        )
+    elif verdict["body"] == "mars":
+        metadata["terrain_name"] = "Mars Upload — surface image"
+        metadata["source"] = "uploaded-image-mars"
+    else:
+        metadata["terrain_name"] = "Terrain Upload — image"
 
     return build_payload(elevation, metadata)
 
