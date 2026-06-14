@@ -256,7 +256,6 @@ export default function App() {
           onGlReady={handleGlReady}
         />
       </SceneErrorBoundary>
-      <div className="rover-hint">WASD / ARROWS — DRIVE ROVER · DRAG — ORBIT · SCROLL — ZOOM</div>
       <pre id="perf-stats" className="perf-stats" />
       <SystemMonitor clientGpu={clientGpu} />
       <HUD

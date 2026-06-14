@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls, Html } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -7,7 +7,7 @@ import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
 import Rover from './Rover';
 import { getRegolithMaps } from './lunarSurface';
-import { groundHeight, worldHeight } from '../engine/world';
+import { lunarSample, worldHeight } from '../engine/world';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -137,106 +137,60 @@ function InterestBeacon({ poi, terrain }) {
 /* ── Surrounding lunar plain: the analyzed patch sits inside a much
    larger ground disc so its edges read as "more moon", not a cliff into
    space. Fog swallows the far rim. ── */
-/* ── Infinite streaming world: a grid of regolith chunks centred on the
-   camera. As the rover drives, chunks that fall behind are recycled to the
-   leading edge, so the surface never ends. Heights come from the shared,
-   deterministic groundHeight(), so neighbouring chunks tile seamlessly and
-   the rover (which samples the same field) always sits on the ground. ── */
-const TILE_SEG = 40;
-const TILE_RADIUS = 3; // (2R+1)^2 = 49 chunks live at once
+/* ── The lunar world: one finite surface around the analyzed patch — maria,
+   highlands and impact craters from the shared lunarSample() field, so it is
+   continuous with the patch (no floating tile) and reads as real Moon, not
+   random dunes. Vertex-coloured (dark mare / bright highland). Sized to fade
+   into the fogged horizon before the far plane — no square, no hard cut. ── */
+const GROUND_SEG = 340;
 
-function buildTile(terrain, i, j, tileSize) {
-  const g = new THREE.PlaneGeometry(tileSize, tileSize, TILE_SEG, TILE_SEG);
-  g.rotateX(-Math.PI / 2);
-  const cx = i * tileSize;
-  const cz = j * tileSize;
-  const detail = 60; // regolith detail repeats every 60 m
-  const pos = g.attributes.position;
-  const uv = g.attributes.uv;
-  for (let k = 0; k < pos.count; k++) {
-    const wx = cx + pos.getX(k);
-    const wz = cz + pos.getZ(k);
-    pos.setY(k, groundHeight(terrain, wx, wz));
-    uv.setXY(k, wx / detail, wz / detail);
-  }
-  g.computeVertexNormals();
-  g.translate(cx, 0, cz);
-  return g;
-}
-
-function StreamingGround({ terrain }) {
-  const tileSize = terrain.scale * 2;
+function LunarWorld({ terrain }) {
+  const worldScale = terrain.scale;
   const maps = getRegolithMaps();
-  const material = useMemo(() => {
+  const { normalMap, roughnessMap } = useMemo(() => {
     const n = maps.normal.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping;
     const r = maps.roughness.clone(); r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping;
-    return new THREE.MeshStandardMaterial({
-      color: '#6a6a70', roughness: 1, metalness: 0,
-      normalMap: n, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: r,
-    });
+    return { normalMap: n, roughnessMap: r };
   }, [maps]);
 
-  const cacheRef = useRef(new Map());
-  const lastRef = useRef({ i: NaN, j: NaN });
-  const { camera } = useThree();
-  const [center, setCenter] = useState({ i: 0, j: 0 });
-
-  useFrame(() => {
-    const ci = Math.round(camera.position.x / tileSize);
-    const cj = Math.round(camera.position.z / tileSize);
-    if (ci !== lastRef.current.i || cj !== lastRef.current.j) {
-      lastRef.current = { i: ci, j: cj };
-      setCenter({ i: ci, j: cj });
+  const geometry = useMemo(() => {
+    const size = worldScale * 14;
+    const g = new THREE.PlaneGeometry(size, size, GROUND_SEG, GROUND_SEG);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position;
+    const uv = g.attributes.uv;
+    const colors = new Float32Array(pos.count * 3);
+    const relief = Math.max(40, terrain.maxH - terrain.minH);
+    const detail = 60; // regolith repeats every 60 m
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k);
+      const z = pos.getZ(k);
+      const { h, mare } = lunarSample(terrain, x, z);
+      pos.setY(k, h);
+      uv.setXY(k, x / detail, z / detail);
+      const e = Math.max(0, Math.min(1, (h - terrain.minH) / (relief * 1.6)));
+      const base = (0.50 - mare * 0.30) + e * 0.12; // mare darker, highland/peaks lighter
+      colors[k * 3] = base;
+      colors[k * 3 + 1] = base * 0.99;
+      colors[k * 3 + 2] = base * 0.96;
     }
-  });
-
-  const tiles = useMemo(() => {
-    const cache = cacheRef.current;
-    const visible = new Set();
-    const list = [];
-    for (let di = -TILE_RADIUS; di <= TILE_RADIUS; di++) {
-      for (let dj = -TILE_RADIUS; dj <= TILE_RADIUS; dj++) {
-        const i = center.i + di;
-        const j = center.j + dj;
-        const key = `${i}:${j}`;
-        visible.add(key);
-        let geo = cache.get(key);
-        if (!geo) { geo = buildTile(terrain, i, j, tileSize); cache.set(key, geo); }
-        list.push({ key, geo });
-      }
-    }
-    // recycle chunks no longer in view
-    if (cache.size > 96) {
-      for (const k of [...cache.keys()]) {
-        if (!visible.has(k)) { cache.get(k).dispose(); cache.delete(k); }
-      }
-    }
-    return list;
-  }, [center, terrain, tileSize]);
-
-  useEffect(() => () => {
-    for (const g of cacheRef.current.values()) g.dispose();
-    cacheRef.current.clear();
-  }, []);
+    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    g.computeVertexNormals();
+    return g;
+  }, [worldScale, terrain.minH, terrain.maxH]);
 
   return (
-    <group>
-      {tiles.map((t) => (
-        <mesh key={t.key} geometry={t.geo} material={material} receiveShadow frustumCulled />
-      ))}
-    </group>
+    <mesh geometry={geometry} receiveShadow>
+      <meshStandardMaterial
+        vertexColors
+        roughness={1}
+        metalness={0}
+        normalMap={normalMap}
+        normalScale={new THREE.Vector2(0.5, 0.5)}
+        roughnessMap={roughnessMap}
+      />
+    </mesh>
   );
-}
-
-/* ── Sky that follows the camera so the starfield always surrounds the
-   rover, however far it roams from the analyzed patch. ── */
-function SkyFollow({ children }) {
-  const ref = useRef();
-  const { camera } = useThree();
-  useFrame(() => {
-    if (ref.current) ref.current.position.set(camera.position.x, 0, camera.position.z);
-  });
-  return <group ref={ref}>{children}</group>;
 }
 
 /* ── Space dome: a vast inward-facing shell so zooming out always shows
@@ -409,20 +363,18 @@ export default function SceneCanvas({
     >
       <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
-      <SkyFollow>
-        <SpaceDome worldScale={worldScale} />
-        <Stars
-          radius={worldScale * 3.2}
-          depth={worldScale * 0.6}
-          count={3200}
-          factor={worldScale / 70}
-          saturation={0}
-          fade
-          speed={0.2}
-        />
-      </SkyFollow>
+      <SpaceDome worldScale={worldScale} />
+      <Stars
+        radius={worldScale * 3.2}
+        depth={worldScale * 0.6}
+        count={3200}
+        factor={worldScale / 70}
+        saturation={0}
+        fade
+        speed={0.2}
+      />
 
-      {terrain && <StreamingGround terrain={terrain} />}
+      {terrain && <LunarWorld terrain={terrain} />}
       {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>

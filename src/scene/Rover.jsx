@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { worldHeight } from '../engine/world';
@@ -20,97 +20,42 @@ function worstAlarm(params) {
 }
 
 /**
- * BHUVAN-1 — a drivable six-wheel rover. WASD / arrows drive it across the
- * whole world (DEM patch + procedural surround); it sits on the terrain,
- * leans to the slope, wheels spin with speed. Pose/telemetry feeds the same
- * mission bus the ops console reads. The camera follows while driving.
+ * BHUVAN-1 — the surface asset (digital twin), parked on the analyzed site
+ * for scale and live telemetry. Sits on the terrain, leaned to the local
+ * slope; status light driven by the mission telemetry bus. Not a game piece —
+ * a fixed reference on the surface under survey.
  */
 export default function Rover({ terrain }) {
-  const group = useRef();
-  const wheels = useRef([]);
   const navRef = useRef();
   const lightRef = useRef();
   const telem = useRef(null);
-  const keys = useRef({});
-  const heading = useRef(2.0);
-  const speed = useRef(0);
-  const pos = useRef(new THREE.Vector3(0, 0, 0));
-  const { camera, controls } = useThree();
-
-  const tmpN = useMemo(() => new THREE.Vector3(), []);
-  const qSlope = useMemo(() => new THREE.Quaternion(), []);
-  const qYaw = useMemo(() => new THREE.Quaternion(), []);
 
   const worldScale = terrain?.scale || 200;
-  const S = worldScale * 0.011; // rover ~ a few metres across
+  const S = worldScale * 0.011; // a few metres across
+
+  // Parked pose: a spot on the patch, sitting on the surface, leaned to slope.
+  const { position, quaternion } = useMemo(() => {
+    const px = worldScale * 0.06;
+    const pz = -worldScale * 0.04;
+    const gy = worldHeight(terrain, px, pz);
+    const e = worldScale * 0.008;
+    const hx = (worldHeight(terrain, px + e, pz) - worldHeight(terrain, px - e, pz)) / (2 * e);
+    const hz = (worldHeight(terrain, px, pz + e) - worldHeight(terrain, px, pz - e)) / (2 * e);
+    const normal = new THREE.Vector3(-hx, 1, -hz).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, normal);
+    return { position: [px, gy + S * 0.35, pz], quaternion: q };
+  }, [terrain, worldScale, S]);
 
   useEffect(() => {
     missionControl.start();
     const off = missionControl.subscribe((p) => { telem.current = p; });
-    const dn = (e) => { keys.current[e.key.toLowerCase()] = true; };
-    const up = (e) => { keys.current[e.key.toLowerCase()] = false; };
-    window.addEventListener('keydown', dn);
-    window.addEventListener('keyup', up);
-    return () => {
-      off(); missionControl.stop();
-      window.removeEventListener('keydown', dn);
-      window.removeEventListener('keyup', up);
-    };
+    return () => { off(); missionControl.stop(); };
   }, []);
 
-  useFrame((state, dt) => {
-    if (!group.current || !terrain) return;
-    const k = keys.current;
+  useFrame((state) => {
     const t = state.clock.elapsedTime;
-    const fwd = (k['w'] || k['arrowup'] ? 1 : 0) - (k['s'] || k['arrowdown'] ? 1 : 0);
-    const turn = (k['a'] || k['arrowleft'] ? 1 : 0) - (k['d'] || k['arrowright'] ? 1 : 0);
-
-    const maxSpeed = worldScale * 0.16;
-    speed.current += (fwd * maxSpeed - speed.current) * Math.min(1, dt * 2.5);
-    if (Math.abs(speed.current) > 0.01) heading.current += turn * dt * 0.9 * Math.sign(speed.current || 1);
-    else heading.current += turn * dt * 0.6;
-
-    pos.current.x += Math.sin(heading.current) * speed.current * dt;
-    pos.current.z += Math.cos(heading.current) * speed.current * dt;
-    // Effectively unbounded — the streaming world regenerates around the rover.
-    const lim = worldScale * 4000;
-    pos.current.x = Math.max(-lim, Math.min(lim, pos.current.x));
-    pos.current.z = Math.max(-lim, Math.min(lim, pos.current.z));
-
-    const x = pos.current.x, z = pos.current.z;
-    const gy = worldHeight(terrain, x, z);
-    const e = worldScale * 0.008;
-    const hx = (worldHeight(terrain, x + e, z) - worldHeight(terrain, x - e, z)) / (2 * e);
-    const hz = (worldHeight(terrain, x, z + e) - worldHeight(terrain, x, z - e)) / (2 * e);
-    tmpN.set(-hx, 1, -hz).normalize();
-
-    group.current.position.set(x, gy + S * 0.35, z);
-    qSlope.setFromUnitVectors(UP, tmpN);
-    qYaw.setFromAxisAngle(UP, -heading.current);
-    group.current.quaternion.copy(qSlope).multiply(qYaw);
-
-    // wheels spin with travel
-    const spin = (speed.current * dt) / (S * 0.32);
-    wheels.current.forEach((w) => { if (w) w.rotation.x += spin; });
-
-    // Camera follows while driving. OrbitControls.update() only re-orients on
-    // a target move — it won't translate the camera — so shift the camera by
-    // the SAME delta the target moves, dragging the whole orbit rig along.
-    if (controls && (fwd !== 0 || turn !== 0)) {
-      const tgt = controls.target;
-      const k = Math.min(1, dt * 1.6);
-      const nx = tgt.x + (x - tgt.x) * k;
-      const ny = tgt.y + (gy - tgt.y) * k;
-      const nz = tgt.z + (z - tgt.z) * k;
-      camera.position.x += nx - tgt.x;
-      camera.position.y += ny - tgt.y;
-      camera.position.z += nz - tgt.z;
-      tgt.set(nx, ny, nz);
-      controls.update();
-    }
-
-    // status light by worst alarm
-    const sev = worstAlarm(telem.current?.params);
+    const p = telem.current;
+    const sev = worstAlarm(p?.params);
     const col = ALARM_COLOR[sev];
     const blink = 0.5 + 0.5 * Math.sin(t * (sev === 'CRITICAL' ? 9 : sev === 'WARN' ? 5 : 2.2));
     if (navRef.current) { navRef.current.material.color.set(col); navRef.current.material.opacity = 0.4 + blink * 0.6; }
@@ -119,52 +64,39 @@ export default function Rover({ terrain }) {
 
   const body = '#d8d6cf';
   const dark = '#34343a';
-  // wheel local positions: 3 per side
   const wheelPos = [-1, 0, 1].flatMap((rowi) => [-1, 1].map((side) => [side * S * 1.15, S * 0.42, rowi * S * 1.15]));
-  let wIdx = 0;
 
   return (
-    <group ref={group}>
+    <group position={position} quaternion={quaternion}>
       {/* chassis */}
       <mesh position={[0, S * 1.0, 0]} castShadow>
         <boxGeometry args={[S * 1.7, S * 0.6, S * 2.6]} />
         <meshStandardMaterial color={body} metalness={0.3} roughness={0.55} />
       </mesh>
-      {/* warm-electronics box / RTG at rear */}
       <mesh position={[0, S * 1.2, -S * 1.55]} castShadow>
         <boxGeometry args={[S * 0.8, S * 0.5, S * 0.6]} />
         <meshStandardMaterial color={dark} metalness={0.5} roughness={0.5} />
       </mesh>
 
-      {/* six wheels + rocker bars */}
-      {wheelPos.map((p, i) => {
-        const idx = wIdx++;
-        return (
-          <group key={i}>
-            <mesh
-              ref={(el) => { wheels.current[idx] = el; }}
-              position={p}
-              rotation={[0, 0, Math.PI / 2]}
-              castShadow
-            >
-              <cylinderGeometry args={[S * 0.42, S * 0.42, S * 0.34, 16]} />
-              <meshStandardMaterial color="#26262b" metalness={0.2} roughness={0.85} />
-            </mesh>
-            {/* hub */}
-            <mesh position={[p[0], p[1], p[2]]} rotation={[0, 0, Math.PI / 2]}>
-              <cylinderGeometry args={[S * 0.16, S * 0.16, S * 0.36, 8]} />
-              <meshStandardMaterial color="#8a8a90" metalness={0.6} roughness={0.4} />
-            </mesh>
-            {/* strut to chassis */}
-            <mesh position={[p[0] * 0.7, S * 0.72, p[2]]} rotation={[0, 0, p[0] > 0 ? -0.5 : 0.5]}>
-              <cylinderGeometry args={[S * 0.06, S * 0.06, S * 0.8, 6]} />
-              <meshStandardMaterial color="#6a6a72" metalness={0.6} roughness={0.45} />
-            </mesh>
-          </group>
-        );
-      })}
+      {/* six wheels + struts */}
+      {wheelPos.map((wp, i) => (
+        <group key={i}>
+          <mesh position={wp} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[S * 0.42, S * 0.42, S * 0.34, 16]} />
+            <meshStandardMaterial color="#26262b" metalness={0.2} roughness={0.85} />
+          </mesh>
+          <mesh position={[wp[0], wp[1], wp[2]]} rotation={[0, 0, Math.PI / 2]}>
+            <cylinderGeometry args={[S * 0.16, S * 0.16, S * 0.36, 8]} />
+            <meshStandardMaterial color="#8a8a90" metalness={0.6} roughness={0.4} />
+          </mesh>
+          <mesh position={[wp[0] * 0.7, S * 0.72, wp[2]]} rotation={[0, 0, wp[0] > 0 ? -0.5 : 0.5]}>
+            <cylinderGeometry args={[S * 0.06, S * 0.06, S * 0.8, 6]} />
+            <meshStandardMaterial color="#6a6a72" metalness={0.6} roughness={0.45} />
+          </mesh>
+        </group>
+      ))}
 
-      {/* camera mast + head (the "face") */}
+      {/* camera mast + head */}
       <mesh position={[0, S * 1.9, S * 0.9]} castShadow>
         <cylinderGeometry args={[S * 0.07, S * 0.08, S * 1.4, 8]} />
         <meshStandardMaterial color="#9a9aa2" metalness={0.6} roughness={0.4} />
@@ -173,7 +105,6 @@ export default function Rover({ terrain }) {
         <boxGeometry args={[S * 0.7, S * 0.32, S * 0.3]} />
         <meshStandardMaterial color={dark} metalness={0.5} roughness={0.5} />
       </mesh>
-      {/* two camera eyes */}
       {[-1, 1].map((sx) => (
         <mesh key={sx} position={[sx * S * 0.2, S * 2.65, S * 1.06]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[S * 0.07, S * 0.07, S * 0.06, 12]} />
@@ -181,30 +112,19 @@ export default function Rover({ terrain }) {
         </mesh>
       ))}
 
-      {/* folded robotic arm at front */}
-      <mesh position={[S * 0.3, S * 0.85, S * 1.5]} rotation={[Math.PI / 3, 0, 0]} castShadow>
-        <cylinderGeometry args={[S * 0.07, S * 0.07, S * 1.2, 8]} />
-        <meshStandardMaterial color="#b8b6af" metalness={0.4} roughness={0.5} />
-      </mesh>
-      <mesh position={[S * 0.3, S * 0.35, S * 2.05]} castShadow>
-        <boxGeometry args={[S * 0.28, S * 0.28, S * 0.28]} />
-        <meshStandardMaterial color={dark} metalness={0.5} roughness={0.5} />
-      </mesh>
-
       {/* high-gain antenna */}
       <mesh position={[-S * 0.5, S * 1.7, -S * 0.9]} rotation={[0, 0, -0.4]} castShadow>
         <coneGeometry args={[S * 0.34, S * 0.16, 16, 1, true]} />
         <meshStandardMaterial color="#d8d8de" metalness={0.4} roughness={0.5} side={THREE.DoubleSide} />
       </mesh>
 
-      {/* status nav light + local glow */}
+      {/* status light */}
       <mesh ref={navRef} position={[0, S * 1.5, 0]}>
         <sphereGeometry args={[S * 0.12, 12, 12]} />
         <meshBasicMaterial color="#34d399" transparent toneMapped={false} />
       </mesh>
       <pointLight ref={lightRef} position={[0, S * 1.7, 0]} distance={S * 12} color="#34d399" intensity={S * 3} />
 
-      {/* ID tag */}
       <Html distanceFactor={worldScale * 0.5} position={[0, S * 3.4, 0]} style={{ pointerEvents: 'none' }} center>
         <div className="twin-tag">BHUVAN-1 ROVER</div>
       </Html>
