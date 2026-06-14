@@ -5,9 +5,10 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
-import LanderTwin from './LanderTwin';
+import Rover from './Rover';
 import { getRegolithMaps } from './lunarSurface';
 import { sampleHeight } from '../engine/terrain';
+import { proceduralHeight, worldHeight } from '../engine/world';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -43,7 +44,7 @@ function TerrainInspectionControls({ target, worldScale = 200 }) {
       maxPolarAngle={Math.PI / 2.08}
       minPolarAngle={0.05}
       minDistance={2}
-      maxDistance={worldScale * 1.6}
+      maxDistance={worldScale * 6}
     />
   );
 }
@@ -137,27 +138,48 @@ function InterestBeacon({ poi, terrain }) {
 /* ── Surrounding lunar plain: the analyzed patch sits inside a much
    larger ground disc so its edges read as "more moon", not a cliff into
    space. Fog swallows the far rim. ── */
-function EdgeApron({ worldScale, minH }) {
+/* ── Procedural world: rolling regolith terrain extending far past the
+   analyzed patch so the surface reads as a whole world, not a square tile.
+   Same height field the rover samples (engine/world), so it can drive out
+   here and stay on the ground. Sized to fade fully into fog before the far
+   plane — no hard clip. ── */
+function ProceduralGround({ terrain }) {
+  const worldScale = terrain.scale;
   const maps = getRegolithMaps();
   const { normalMap, roughnessMap } = useMemo(() => {
-    const n = maps.normal.clone();
-    n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(260, 260);
-    const r = maps.roughness.clone();
-    r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping; r.repeat.set(260, 260);
+    const n = maps.normal.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping;
+    const r = maps.roughness.clone(); r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping;
     return { normalMap: n, roughnessMap: r };
   }, [maps]);
-  // Vast regolith plain the analyzed patch sits inside — same rock detail as
-  // the patch so the seam disappears and the surface reads as endless,
-  // dissolving into the fogged horizon rather than a floating tile.
+
+  const geometry = useMemo(() => {
+    const size = worldScale * 16;
+    const seg = 200;
+    const g = new THREE.PlaneGeometry(size, size, seg, seg);
+    g.rotateX(-Math.PI / 2);
+    const amp = Math.max(8, (terrain.maxH - terrain.minH) * 0.55);
+    const baseline = terrain.minH - worldScale * 0.004;
+    const detail = 60; // regolith repeats every 60 m
+    const posAttr = g.attributes.position;
+    const uvAttr = g.attributes.uv;
+    for (let i = 0; i < posAttr.count; i++) {
+      const x = posAttr.getX(i);
+      const z = posAttr.getZ(i);
+      posAttr.setY(i, baseline + proceduralHeight(x, z, worldScale, amp));
+      uvAttr.setXY(i, x / detail, z / detail);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [worldScale, terrain.minH, terrain.maxH]);
+
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, minH - worldScale * 0.006, 0]} receiveShadow>
-      <circleGeometry args={[worldScale * 60, 128]} />
+    <mesh geometry={geometry} receiveShadow>
       <meshStandardMaterial
         color="#6a6a70"
         roughness={1}
         metalness={0}
         normalMap={normalMap}
-        normalScale={new THREE.Vector2(0.45, 0.45)}
+        normalScale={new THREE.Vector2(0.5, 0.5)}
         roughnessMap={roughnessMap}
       />
     </mesh>
@@ -197,7 +219,7 @@ function SpaceDome({ worldScale }) {
 
   return (
     <mesh scale={[-1, 1, 1]}>
-      <sphereGeometry args={[worldScale * 6, 32, 32]} />
+      <sphereGeometry args={[worldScale * 10, 32, 32]} />
       <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} />
     </mesh>
   );
@@ -209,7 +231,7 @@ function CameraFloor({ terrain }) {
   const { camera, controls } = useThree();
   useFrame(() => {
     if (!terrain) return;
-    const ground = sampleHeight(terrain, camera.position.x, camera.position.z);
+    const ground = worldHeight(terrain, camera.position.x, camera.position.z);
     const clearance = terrain.scale * 0.015 + 2;
     const minY = ground + clearance;
     if (camera.position.y < minY) {
@@ -244,7 +266,7 @@ function Lighting({ worldScale }) {
       {/* Fog color MUST match the scene background — any mismatch reads as
           holes in the terrain at grazing camera angles. Pushed far so the
           vast plain dissolves into a distant horizon, not a wall. */}
-      <fog attach="fog" args={['#0b0c10', s * 1.1, s * 6.0]} />
+      <fog attach="fog" args={['#0b0c10', s * 0.8, s * 7.0]} />
     </>
   );
 }
@@ -318,7 +340,7 @@ export default function SceneCanvas({
         position: [-worldScale * 0.34, worldScale * 0.14, worldScale * 0.42],
         fov: 55,
         near: 0.5,
-        far: worldScale * 9,
+        far: worldScale * 13,
       }}
       gl={{
         antialias: true,
@@ -345,15 +367,15 @@ export default function SceneCanvas({
         speed={0.2}
       />
 
-      {terrain && <EdgeApron worldScale={worldScale} minH={terrain.minH} />}
+      {terrain && <ProceduralGround terrain={terrain} />}
       {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>
         {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
       </group>
 
-      {/* Live digital twin driven by the telemetry bus — tiny, for scale. */}
-      {terrain && <LanderTwin terrain={terrain} />}
+      {/* Drivable rover (WASD) — roams the whole world, tiny for scale. */}
+      {terrain && <Rover terrain={terrain} />}
 
       {landingTarget && (
         <LandingMarker
