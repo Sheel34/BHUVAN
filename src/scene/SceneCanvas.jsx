@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls, Html } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -7,8 +7,7 @@ import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
 import Rover from './Rover';
 import { getRegolithMaps } from './lunarSurface';
-import { sampleHeight } from '../engine/terrain';
-import { proceduralHeight, worldHeight } from '../engine/world';
+import { groundHeight, worldHeight } from '../engine/world';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -138,52 +137,106 @@ function InterestBeacon({ poi, terrain }) {
 /* ── Surrounding lunar plain: the analyzed patch sits inside a much
    larger ground disc so its edges read as "more moon", not a cliff into
    space. Fog swallows the far rim. ── */
-/* ── Procedural world: rolling regolith terrain extending far past the
-   analyzed patch so the surface reads as a whole world, not a square tile.
-   Same height field the rover samples (engine/world), so it can drive out
-   here and stay on the ground. Sized to fade fully into fog before the far
-   plane — no hard clip. ── */
-function ProceduralGround({ terrain }) {
-  const worldScale = terrain.scale;
+/* ── Infinite streaming world: a grid of regolith chunks centred on the
+   camera. As the rover drives, chunks that fall behind are recycled to the
+   leading edge, so the surface never ends. Heights come from the shared,
+   deterministic groundHeight(), so neighbouring chunks tile seamlessly and
+   the rover (which samples the same field) always sits on the ground. ── */
+const TILE_SEG = 40;
+const TILE_RADIUS = 3; // (2R+1)^2 = 49 chunks live at once
+
+function buildTile(terrain, i, j, tileSize) {
+  const g = new THREE.PlaneGeometry(tileSize, tileSize, TILE_SEG, TILE_SEG);
+  g.rotateX(-Math.PI / 2);
+  const cx = i * tileSize;
+  const cz = j * tileSize;
+  const detail = 60; // regolith detail repeats every 60 m
+  const pos = g.attributes.position;
+  const uv = g.attributes.uv;
+  for (let k = 0; k < pos.count; k++) {
+    const wx = cx + pos.getX(k);
+    const wz = cz + pos.getZ(k);
+    pos.setY(k, groundHeight(terrain, wx, wz));
+    uv.setXY(k, wx / detail, wz / detail);
+  }
+  g.computeVertexNormals();
+  g.translate(cx, 0, cz);
+  return g;
+}
+
+function StreamingGround({ terrain }) {
+  const tileSize = terrain.scale * 2;
   const maps = getRegolithMaps();
-  const { normalMap, roughnessMap } = useMemo(() => {
+  const material = useMemo(() => {
     const n = maps.normal.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping;
     const r = maps.roughness.clone(); r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping;
-    return { normalMap: n, roughnessMap: r };
+    return new THREE.MeshStandardMaterial({
+      color: '#6a6a70', roughness: 1, metalness: 0,
+      normalMap: n, normalScale: new THREE.Vector2(0.5, 0.5), roughnessMap: r,
+    });
   }, [maps]);
 
-  const geometry = useMemo(() => {
-    const size = worldScale * 16;
-    const seg = 200;
-    const g = new THREE.PlaneGeometry(size, size, seg, seg);
-    g.rotateX(-Math.PI / 2);
-    const amp = Math.max(8, (terrain.maxH - terrain.minH) * 0.55);
-    const baseline = terrain.minH - worldScale * 0.004;
-    const detail = 60; // regolith repeats every 60 m
-    const posAttr = g.attributes.position;
-    const uvAttr = g.attributes.uv;
-    for (let i = 0; i < posAttr.count; i++) {
-      const x = posAttr.getX(i);
-      const z = posAttr.getZ(i);
-      posAttr.setY(i, baseline + proceduralHeight(x, z, worldScale, amp));
-      uvAttr.setXY(i, x / detail, z / detail);
+  const cacheRef = useRef(new Map());
+  const lastRef = useRef({ i: NaN, j: NaN });
+  const { camera } = useThree();
+  const [center, setCenter] = useState({ i: 0, j: 0 });
+
+  useFrame(() => {
+    const ci = Math.round(camera.position.x / tileSize);
+    const cj = Math.round(camera.position.z / tileSize);
+    if (ci !== lastRef.current.i || cj !== lastRef.current.j) {
+      lastRef.current = { i: ci, j: cj };
+      setCenter({ i: ci, j: cj });
     }
-    g.computeVertexNormals();
-    return g;
-  }, [worldScale, terrain.minH, terrain.maxH]);
+  });
+
+  const tiles = useMemo(() => {
+    const cache = cacheRef.current;
+    const visible = new Set();
+    const list = [];
+    for (let di = -TILE_RADIUS; di <= TILE_RADIUS; di++) {
+      for (let dj = -TILE_RADIUS; dj <= TILE_RADIUS; dj++) {
+        const i = center.i + di;
+        const j = center.j + dj;
+        const key = `${i}:${j}`;
+        visible.add(key);
+        let geo = cache.get(key);
+        if (!geo) { geo = buildTile(terrain, i, j, tileSize); cache.set(key, geo); }
+        list.push({ key, geo });
+      }
+    }
+    // recycle chunks no longer in view
+    if (cache.size > 96) {
+      for (const k of [...cache.keys()]) {
+        if (!visible.has(k)) { cache.get(k).dispose(); cache.delete(k); }
+      }
+    }
+    return list;
+  }, [center, terrain, tileSize]);
+
+  useEffect(() => () => {
+    for (const g of cacheRef.current.values()) g.dispose();
+    cacheRef.current.clear();
+  }, []);
 
   return (
-    <mesh geometry={geometry} receiveShadow>
-      <meshStandardMaterial
-        color="#6a6a70"
-        roughness={1}
-        metalness={0}
-        normalMap={normalMap}
-        normalScale={new THREE.Vector2(0.5, 0.5)}
-        roughnessMap={roughnessMap}
-      />
-    </mesh>
+    <group>
+      {tiles.map((t) => (
+        <mesh key={t.key} geometry={t.geo} material={material} receiveShadow frustumCulled />
+      ))}
+    </group>
   );
+}
+
+/* ── Sky that follows the camera so the starfield always surrounds the
+   rover, however far it roams from the analyzed patch. ── */
+function SkyFollow({ children }) {
+  const ref = useRef();
+  const { camera } = useThree();
+  useFrame(() => {
+    if (ref.current) ref.current.position.set(camera.position.x, 0, camera.position.z);
+  });
+  return <group ref={ref}>{children}</group>;
 }
 
 /* ── Space dome: a vast inward-facing shell so zooming out always shows
@@ -356,18 +409,20 @@ export default function SceneCanvas({
     >
       <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
-      <SpaceDome worldScale={worldScale} />
-      <Stars
-        radius={worldScale * 3.2}
-        depth={worldScale * 0.6}
-        count={3200}
-        factor={worldScale / 70}
-        saturation={0}
-        fade
-        speed={0.2}
-      />
+      <SkyFollow>
+        <SpaceDome worldScale={worldScale} />
+        <Stars
+          radius={worldScale * 3.2}
+          depth={worldScale * 0.6}
+          count={3200}
+          factor={worldScale / 70}
+          saturation={0}
+          fade
+          speed={0.2}
+        />
+      </SkyFollow>
 
-      {terrain && <ProceduralGround terrain={terrain} />}
+      {terrain && <StreamingGround terrain={terrain} />}
       {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>

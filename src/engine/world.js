@@ -24,22 +24,38 @@ export function proceduralHeight(x, z, wavelength, amp) {
   return h;
 }
 
-// Unified height: real DEM inside the patch, procedural outside, blended
-// across the patch rim so there is no wall/seam.
+// Procedural amplitude damped to flat under the patch footprint (so the DEM
+// always sits cleanly on top, no poke-through), full strength out in the world.
+function patchDamp(terrain, x, z) {
+  const half = terrain.scale * 0.5;
+  const d = Math.max(Math.abs(x), Math.abs(z)) / half;
+  if (d >= 1.15) return 1;
+  if (d <= 0.85) return 0;
+  const t = (d - 0.85) / 0.30;
+  return t * t * (3 - 2 * t); // smoothstep
+}
+
+// The infinite procedural ground (used by the streaming terrain mesh).
+export function groundHeight(terrain, x, z) {
+  const amp = Math.max(8, (terrain.maxH - terrain.minH) * 0.55);
+  const baseline = terrain.minH - terrain.scale * 0.004;
+  return baseline + proceduralHeight(x, z, terrain.scale, amp) * patchDamp(terrain, x, z);
+}
+
+// Unified height the rover stands on: real DEM inside the patch, procedural
+// ground outside, blended across the rim so there is no wall/seam.
 export function worldHeight(terrain, x, z) {
   if (!terrain) return 0;
   const half = terrain.scale * 0.5;
-  const amp = Math.max(8, (terrain.maxH - terrain.minH) * 0.55);
-  const proc = terrain.minH + proceduralHeight(x, z, terrain.scale, amp);
   const ax = Math.abs(x), az = Math.abs(z);
   if (ax <= half && az <= half) {
     const patchH = sampleHeight(terrain, x, z);
     const edge = Math.max(ax, az) / half; // 0 centre → 1 rim
-    if (edge > 0.82) {
-      const t = (edge - 0.82) / 0.18;
-      return patchH * (1 - t) + proc * t;
+    if (edge > 0.85) {
+      const t = (edge - 0.85) / 0.15;
+      return patchH * (1 - t) + groundHeight(terrain, x, z) * t;
     }
     return patchH;
   }
-  return proc;
+  return groundHeight(terrain, x, z);
 }

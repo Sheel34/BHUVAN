@@ -35,12 +35,11 @@ export default function Rover({ terrain }) {
   const heading = useRef(2.0);
   const speed = useRef(0);
   const pos = useRef(new THREE.Vector3(0, 0, 0));
-  const { controls } = useThree();
+  const { camera, controls } = useThree();
 
   const tmpN = useMemo(() => new THREE.Vector3(), []);
   const qSlope = useMemo(() => new THREE.Quaternion(), []);
   const qYaw = useMemo(() => new THREE.Quaternion(), []);
-  const followTarget = useMemo(() => new THREE.Vector3(), []);
 
   const worldScale = terrain?.scale || 200;
   const S = worldScale * 0.011; // rover ~ a few metres across
@@ -73,7 +72,8 @@ export default function Rover({ terrain }) {
 
     pos.current.x += Math.sin(heading.current) * speed.current * dt;
     pos.current.z += Math.cos(heading.current) * speed.current * dt;
-    const lim = worldScale * 5.5; // roam far past the patch, into the world
+    // Effectively unbounded — the streaming world regenerates around the rover.
+    const lim = worldScale * 4000;
     pos.current.x = Math.max(-lim, Math.min(lim, pos.current.x));
     pos.current.z = Math.max(-lim, Math.min(lim, pos.current.z));
 
@@ -93,10 +93,19 @@ export default function Rover({ terrain }) {
     const spin = (speed.current * dt) / (S * 0.32);
     wheels.current.forEach((w) => { if (w) w.rotation.x += spin; });
 
-    // camera follows while driving
+    // Camera follows while driving. OrbitControls.update() only re-orients on
+    // a target move — it won't translate the camera — so shift the camera by
+    // the SAME delta the target moves, dragging the whole orbit rig along.
     if (controls && (fwd !== 0 || turn !== 0)) {
-      followTarget.set(x, gy, z);
-      controls.target.lerp(followTarget, Math.min(1, dt * 2));
+      const tgt = controls.target;
+      const k = Math.min(1, dt * 1.6);
+      const nx = tgt.x + (x - tgt.x) * k;
+      const ny = tgt.y + (gy - tgt.y) * k;
+      const nz = tgt.z + (z - tgt.z) * k;
+      camera.position.x += nx - tgt.x;
+      camera.position.y += ny - tgt.y;
+      camera.position.z += nz - tgt.z;
+      tgt.set(nx, ny, nz);
       controls.update();
     }
 
