@@ -13,7 +13,7 @@ const MOON_RADIUS = 2;
 // ~2.5x so craters read at globe scale without looking cartoonish.
 const DISPLACEMENT_SCALE = MOON_RADIUS * 0.028;
 const IDLE_SPIN_SPEED = 0.018;
-const CAMERA_HOME = new THREE.Vector3(0, 0.8, 7.4);
+const CAMERA_HOME = new THREE.Vector3(0, 0.7, 11);
 const FLY_DURATION = 2.4;
 
 function easeInOutCubic(t) {

@@ -38,7 +38,7 @@ function craterLayer(x, z, cell) {
   for (let di = -1; di <= 1; di++) {
     for (let dj = -1; dj <= 1; dj++) {
       const gi = ci + di, gj = cj + dj;
-      if (hash(gi * 1.7, gj * 2.3) < 0.5) continue; // not every cell craters
+      if (hash(gi * 1.7, gj * 2.3) < 0.4) continue; // denser crater field
       const cx = (gi + hash(gi + 3.1, gj + 7.7)) * cell;
       const cz = (gj + hash(gi + 5.5, gj + 2.2)) * cell;
       const rad = cell * (0.10 + 0.30 * hash(gi + 9.1, gj + 4.7));
@@ -72,16 +72,22 @@ export function lunarSample(terrain, x, z) {
   const basin = -relief * 0.45 + fbm(x * f * 1.3, z * f * 1.3, 3) * relief * 0.06;
   let h = highland * (1 - mare) + basin * mare;
 
-  // Craters at three scales (mare floors get fewer/smaller).
+  // Craters at four scales (denser; mare floors get fewer/smaller).
   const cr = craterLayer(x, z, wavelength * 0.9)
     + craterLayer(x, z, wavelength * 0.34)
-    + craterLayer(x, z, wavelength * 0.13) * (0.4 + 0.6 * (1 - mare));
+    + craterLayer(x, z, wavelength * 0.13) * (0.4 + 0.6 * (1 - mare))
+    + craterLayer(x, z, wavelength * 0.055) * (0.3 + 0.7 * (1 - mare));
   h += cr * 0.9;
+
+  // Sinuous rilles — meandering collapsed lava channels, mostly in mare.
+  const w = fbm(x * f * 0.9 + 70, z * f * 0.9 + 40, 2);
+  const rille = Math.exp(-(w * w) / 0.0009);
+  h -= relief * 0.14 * rille * (0.35 + 0.65 * mare);
 
   // fine regolith
   h += fbm(x * f * 7, z * f * 7, 4) * relief * 0.03;
 
-  return { h: baseline + h, mare };
+  return { h: baseline + h, mare, cr, relief };
 }
 
 export function groundHeight(terrain, x, z) {

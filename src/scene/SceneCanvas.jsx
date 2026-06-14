@@ -43,7 +43,7 @@ function TerrainInspectionControls({ target, worldScale = 200 }) {
       maxPolarAngle={Math.PI / 2.02}
       minPolarAngle={0.05}
       minDistance={2}
-      maxDistance={worldScale * 12}
+      maxDistance={worldScale * 5}
     />
   );
 }
@@ -155,7 +155,7 @@ function LunarWorld({ terrain }) {
 
   const geometry = useMemo(() => {
     const size = worldScale * 24;
-    const curveR = worldScale * 16; // fake planet curvature radius
+    const curveR = worldScale * 45; // gentle curvature — horizon drop, not a ball
     const g = new THREE.PlaneGeometry(size, size, GROUND_SEG, GROUND_SEG);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
@@ -166,17 +166,21 @@ function LunarWorld({ terrain }) {
     for (let k = 0; k < pos.count; k++) {
       const x = pos.getX(k);
       const z = pos.getZ(k);
-      const { h, mare } = lunarSample(terrain, x, z);
+      const { h, mare, cr } = lunarSample(terrain, x, z);
       // Planet curvature: far terrain bends down so it drops below a round
       // horizon (airless — no fog needed to hide the edge).
       const drop = (x * x + z * z) / (2 * curveR);
       pos.setY(k, h - drop);
       uv.setXY(k, x / detail, z / detail);
       const e = Math.max(0, Math.min(1, (h - terrain.minH) / (relief * 1.6)));
-      const base = (0.50 - mare * 0.30) + e * 0.12; // mare darker, highland/peaks lighter
+      const crN = Math.max(-1, Math.min(1, cr / relief));
+      // Sharper albedo: strong mare/highland split, fresh-crater rims bright,
+      // bowls dark.
+      let base = 0.60 - mare * 0.42 + e * 0.10 + crN * 0.16;
+      base = Math.max(0.10, Math.min(0.96, base));
       colors[k * 3] = base;
-      colors[k * 3 + 1] = base * 0.99;
-      colors[k * 3 + 2] = base * 0.96;
+      colors[k * 3 + 1] = base * 0.985;
+      colors[k * 3 + 2] = base * 0.95;
     }
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     g.computeVertexNormals();
