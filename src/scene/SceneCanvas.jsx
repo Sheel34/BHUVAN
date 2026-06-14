@@ -40,10 +40,10 @@ function TerrainInspectionControls({ target, worldScale = 200 }) {
         ONE: THREE.TOUCH.ROTATE,
         TWO: THREE.TOUCH.DOLLY_PAN,
       }}
-      maxPolarAngle={Math.PI / 2.08}
+      maxPolarAngle={Math.PI / 2.02}
       minPolarAngle={0.05}
       minDistance={2}
-      maxDistance={worldScale * 6}
+      maxDistance={worldScale * 12}
     />
   );
 }
@@ -142,7 +142,7 @@ function InterestBeacon({ poi, terrain }) {
    continuous with the patch (no floating tile) and reads as real Moon, not
    random dunes. Vertex-coloured (dark mare / bright highland). Sized to fade
    into the fogged horizon before the far plane — no square, no hard cut. ── */
-const GROUND_SEG = 340;
+const GROUND_SEG = 384;
 
 function LunarWorld({ terrain }) {
   const worldScale = terrain.scale;
@@ -154,7 +154,8 @@ function LunarWorld({ terrain }) {
   }, [maps]);
 
   const geometry = useMemo(() => {
-    const size = worldScale * 14;
+    const size = worldScale * 24;
+    const curveR = worldScale * 16; // fake planet curvature radius
     const g = new THREE.PlaneGeometry(size, size, GROUND_SEG, GROUND_SEG);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
@@ -166,7 +167,10 @@ function LunarWorld({ terrain }) {
       const x = pos.getX(k);
       const z = pos.getZ(k);
       const { h, mare } = lunarSample(terrain, x, z);
-      pos.setY(k, h);
+      // Planet curvature: far terrain bends down so it drops below a round
+      // horizon (airless — no fog needed to hide the edge).
+      const drop = (x * x + z * z) / (2 * curveR);
+      pos.setY(k, h - drop);
       uv.setXY(k, x / detail, z / detail);
       const e = Math.max(0, Math.min(1, (h - terrain.minH) / (relief * 1.6)));
       const base = (0.50 - mare * 0.30) + e * 0.12; // mare darker, highland/peaks lighter
@@ -226,7 +230,7 @@ function SpaceDome({ worldScale }) {
 
   return (
     <mesh scale={[-1, 1, 1]}>
-      <sphereGeometry args={[worldScale * 10, 32, 32]} />
+      <sphereGeometry args={[worldScale * 30, 48, 48]} />
       <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} />
     </mesh>
   );
@@ -270,10 +274,8 @@ function Lighting({ worldScale }) {
         shadow-bias={-0.0002}
       />
       <directionalLight position={[-s * 0.2, s * 0.1, -s * 0.15]} intensity={0.3} color="#aabbff" />
-      {/* Fog color MUST match the scene background — any mismatch reads as
-          holes in the terrain at grazing camera angles. Pushed far so the
-          vast plain dissolves into a distant horizon, not a wall. */}
-      <fog attach="fog" args={['#0b0c10', s * 0.8, s * 7.0]} />
+      {/* No fog — the Moon is airless. Distance is read crisply; the far
+          terrain instead curves below a round horizon (see LunarWorld). */}
     </>
   );
 }
@@ -347,7 +349,7 @@ export default function SceneCanvas({
         position: [-worldScale * 0.34, worldScale * 0.14, worldScale * 0.42],
         fov: 55,
         near: 0.5,
-        far: worldScale * 13,
+        far: worldScale * 40,
       }}
       gl={{
         antialias: true,
@@ -365,10 +367,10 @@ export default function SceneCanvas({
       <Lighting worldScale={worldScale} />
       <SpaceDome worldScale={worldScale} />
       <Stars
-        radius={worldScale * 3.2}
-        depth={worldScale * 0.6}
-        count={3200}
-        factor={worldScale / 70}
+        radius={worldScale * 22}
+        depth={worldScale * 5}
+        count={4500}
+        factor={worldScale / 30}
         saturation={0}
         fade
         speed={0.2}
