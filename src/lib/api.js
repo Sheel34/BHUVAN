@@ -127,6 +127,8 @@ function adaptPayload(raw) {
 
       disclaimer: raw.metadata.disclaimer ?? null,
 
+      colorUrl: raw.metadata.color_url ? `${API_BASE}${raw.metadata.color_url}` : null,
+
     },
 
     terrain: {

@@ -15,6 +15,7 @@ class TerrainMeta(BaseModel):
     safe_area_pct: float
     crs: str = "local-normalised"
     disclaimer: str | None = None
+    color_url: str | None = None
 
 class TerrainGrid(BaseModel):
     size: int

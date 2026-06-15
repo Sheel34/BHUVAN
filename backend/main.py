@@ -200,6 +200,7 @@ def build_payload(
         safe_area_pct=round((safe_cells / total_cells) * 100.0, 1),
         crs=metadata.get("crs", "local-normalised"),
         disclaimer=metadata.get("disclaimer"),
+        color_url=metadata.get("color_url"),
     )
 
     terrain_grid = TerrainGrid(
@@ -597,7 +598,7 @@ def analyze_sample(request: AnalyzeRequest):
 def dem_fetch(req: DemRequest):
     """Fetch a REAL DEM (AWS Terrain Tiles / SRTM+Copernicus) for a lat/lon and
     run it through the full analysis pipeline. The accurate-terrain path."""
-    from data.dem_fetch import fetch_dem
+    from data.dem_fetch import fetch_dem, fetch_imagery
 
     try:
         elevation, metadata = fetch_dem(req.lat, req.lon, req.zoom)
@@ -606,6 +607,19 @@ def dem_fetch(req: DemRequest):
             status_code=502,
             detail=ErrorDetail(code="DEM_FETCH_FAILED", message=f"Could not fetch DEM: {exc}").model_dump(),
         ) from exc
+
+    # Drape real satellite imagery over the real DEM → photoreal ground.
+    try:
+        import hashlib
+
+        img = fetch_imagery(req.lat, req.lon, req.zoom)
+        key = hashlib.md5(f"{req.lat}_{req.lon}_{req.zoom}".encode()).hexdigest()[:12]
+        img_dir = os.path.join(OUTPUT_DIR, "imagery")
+        os.makedirs(img_dir, exist_ok=True)
+        img.save(os.path.join(img_dir, f"{key}.jpg"), quality=85)
+        metadata["color_url"] = f"/artifacts/imagery/{key}.jpg"
+    except Exception as exc:  # noqa: BLE001 — imagery is an enhancement, not required
+        logger.warning("Imagery fetch failed for %s,%s: %s", req.lat, req.lon, exc)
 
     return build_payload(elevation, metadata)
 

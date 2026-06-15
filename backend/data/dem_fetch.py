@@ -19,6 +19,8 @@ import numpy as np
 from PIL import Image
 
 TILE_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+# ESRI World Imagery — public basemap, no key. Tile order is z/row/col (y/x).
+IMAGERY_URL = "https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
 TILE_PX = 256
 
 
@@ -41,6 +43,37 @@ def _get_tile(z, x, y):
         data = resp.read()
     img = np.asarray(Image.open(io.BytesIO(data)).convert("RGB"), dtype=np.float64)
     return img[..., 0] * 256.0 + img[..., 1] + img[..., 2] / 256.0 - 32768.0
+
+
+def fetch_imagery(lat: float, lon: float, zoom: int = 12, span: int = 2):
+    """Stitched real satellite imagery (ESRI World Imagery) for the SAME tiles
+    as fetch_dem, so the photo aligns with the elevation. Returns a PIL Image."""
+    zoom = max(6, min(14, int(zoom)))
+    span = max(1, min(3, int(span)))
+    cx, cy = _lonlat_to_tile(lon, lat, zoom)
+    half = span // 2
+    n = 2 ** zoom
+    tiles = []
+    for ty in range(cy - half, cy - half + span):
+        row = []
+        for tx in range(cx - half, cx - half + span):
+            url = IMAGERY_URL.format(z=zoom, y=max(0, min(n - 1, ty)), x=tx % n)
+            req = urllib.request.Request(url, headers={"User-Agent": "BHUVAN-DEM/1.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = resp.read()
+            row.append(Image.open(io.BytesIO(data)).convert("RGB"))
+        tiles.append(row)
+    w = sum(im.width for im in tiles[0])
+    h = sum(r[0].height for r in tiles)
+    canvas = Image.new("RGB", (w, h))
+    y = 0
+    for r in tiles:
+        x = 0
+        for im in r:
+            canvas.paste(im, (x, y))
+            x += im.width
+        y += r[0].height
+    return canvas
 
 
 def fetch_dem(lat: float, lon: float, zoom: int = 12, span: int = 2):

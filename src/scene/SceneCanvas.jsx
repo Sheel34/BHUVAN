@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls, Html } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette, N8AO } from '@react-three/postprocessing';
@@ -10,7 +10,7 @@ import Ingress from './Ingress';
 import TercomReplay from './TercomReplay';
 import { getRegolithMaps } from './lunarSurface';
 import { worldHeight } from '../engine/world';
-import { deriveBody } from '../engine/terrain';
+import { deriveBody, sampleHeight } from '../engine/terrain';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -185,20 +185,52 @@ function Surround({ terrain, body }) {
   );
 }
 
-/* ── Space dome: real Milky Way panorama (prebuilt CC-BY asset) on a vast
-   inward-facing shell. Photoreal deep-space sky, not procedural dots. ── */
-function SpaceDome({ worldScale }) {
+/* ── Photoreal draped terrain: real satellite imagery (ESRI World Imagery)
+   mapped onto the real DEM. Single high-res displaced plane, photo as albedo
+   → Google-Earth look, not procedural shapes. Used for the surface view when
+   imagery is available; data layers still use the chunked analysis mesh. ── */
+function DrapedTerrain({ terrain, map }) {
+  const geometry = useMemo(() => {
+    const seg = 384;
+    const g = new THREE.PlaneGeometry(terrain.scale, terrain.scale, seg, seg);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position;
+    const uv = g.attributes.uv;
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k);
+      const z = pos.getZ(k);
+      pos.setY(k, sampleHeight(terrain, x, z));
+      // Patch-normalised UV aligned to the DEM grid (X←row, Z←col).
+      uv.setXY(k, z / terrain.scale + 0.5, 1 - (x / terrain.scale + 0.5));
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [terrain]);
+
+  return (
+    <mesh geometry={geometry} receiveShadow>
+      <meshStandardMaterial map={map} roughness={0.95} metalness={0} />
+    </mesh>
+  );
+}
+
+/* ── Real Milky Way panorama as the scene BACKGROUND (equirectangular, drawn
+   at infinity). No giant geometry — so it works at any world scale, including
+   the huge real-DEM scales where a scaled sky sphere broke the render. ── */
+function SkyBackground() {
+  const { scene } = useThree();
   const tex = useMemo(() => {
     const t = new THREE.TextureLoader().load('/textures/2k_stars_milky_way.jpg');
     t.colorSpace = THREE.SRGBColorSpace;
+    t.mapping = THREE.EquirectangularReflectionMapping;
     return t;
   }, []);
-  return (
-    <mesh scale={[-1, 1, 1]} renderOrder={-1}>
-      <sphereGeometry args={[worldScale * 38, 64, 64]} />
-      <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false} />
-    </mesh>
-  );
+  useEffect(() => {
+    const prev = scene.background;
+    scene.background = tex;
+    return () => { scene.background = prev; };
+  }, [scene, tex]);
+  return null;
 }
 
 /* ── A real planet hanging in the sky (prebuilt texture), lit by the sun →
@@ -301,6 +333,23 @@ export default function SceneCanvas({
 }) {
   const terrain = analysis?.terrain;
   const body = terrain?.body || deriveBody(analysis?.metadata);
+
+  // Real satellite imagery (when present) → photoreal draped surface.
+  const colorUrl = analysis?.metadata?.colorUrl || null;
+  const [colorMap, setColorMap] = useState(null);
+  useEffect(() => {
+    if (!colorUrl) { setColorMap(null); return undefined; }
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin('anonymous');
+    let tex;
+    loader.load(
+      colorUrl,
+      (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; tex = t; setColorMap(t); },
+      undefined,
+      () => setColorMap(null),
+    );
+    return () => { if (tex) tex.dispose(); };
+  }, [colorUrl]);
   const layers = analysis?.layers;
   const inspectionTarget = useMemo(() => {
     if (focusPoint) return [focusPoint.x, focusPoint.y, focusPoint.z];
@@ -356,10 +405,9 @@ export default function SceneCanvas({
       }}
       style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
     >
-      <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
-      <SpaceDome worldScale={worldScale} />
-      <SkyBody body={body} worldScale={worldScale} />
+      <SkyBackground />
+      {worldScale < 5000 && <SkyBody body={body} worldScale={worldScale} />}
       <Stars
         radius={worldScale * 22}
         depth={worldScale * 5}
@@ -374,7 +422,9 @@ export default function SceneCanvas({
       {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>
-        {terrain && <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />}
+        {terrain && (colorMap && (viewMode === 'surface' || viewMode === 'elevation')
+          ? <DrapedTerrain terrain={terrain} map={colorMap} />
+          : <TerrainChunked terrain={terrain} layers={layers} viewMode={viewMode} />)}
       </group>
 
       {/* Parked digital-twin rover — scale + telemetry. */}
