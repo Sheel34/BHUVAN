@@ -7,6 +7,7 @@ import { planIngress } from '../engine/ingress';
 const EXPOSED = new THREE.Color('#ff5b5b');
 const MASKED = new THREE.Color('#5fd0ff');
 const FLIGHT_SECONDS = 14;
+const UP_V = new THREE.Vector3(0, 1, 0);
 
 /* Enemy radar coverage — translucent dome + bright ground ring. */
 function ThreatDome({ threat }) {
@@ -91,11 +92,17 @@ export default function Ingress({ terrain, playing, onDone }) {
     }
 
     if (flying.current) {
-      // chase camera — behind + above the dart, looking ahead. Top Gun shot.
-      const back = tmpPos.clone().sub(tmpAhead).normalize().multiplyScalar(terrain.scale * 0.05);
-      tmpCam.copy(tmpPos).add(back); tmpCam.y += terrain.scale * 0.03;
-      camera.position.lerp(tmpCam, Math.min(1, dt * 3));
-      camera.lookAt(tmpAhead.x, tmpAhead.y, tmpAhead.z);
+      // Low, banked chase that hugs the terrain — the Top Gun shot.
+      const dir = tmpAhead.clone().sub(tmpPos).normalize();
+      const side = dir.clone().cross(UP_V).normalize();
+      const sway = Math.sin(t * 9) * terrain.scale * 0.012; // gentle bank/weave
+      tmpCam.copy(tmpPos)
+        .addScaledVector(dir, -terrain.scale * 0.032)
+        .addScaledVector(side, sway);
+      tmpCam.y += terrain.scale * 0.012;
+      camera.position.lerp(tmpCam, Math.min(1, d * 4));
+      const look = tmpPos.clone().addScaledVector(dir, terrain.scale * 0.05);
+      camera.lookAt(look);
       if (flightT.current >= 1) {
         flying.current = false;
         if (controls) {
@@ -135,7 +142,7 @@ export default function Ingress({ terrain, playing, onDone }) {
           <ringGeometry args={[plan.cep * 0.45, plan.cep * 0.5, 32]} />
           <meshBasicMaterial color="#ffce4d" transparent opacity={0.6} side={THREE.DoubleSide} toneMapped={false} />
         </mesh>
-        <Html distanceFactor={terrain.scale * 0.5} position={[0, dartLen * 2, 0]} style={{ pointerEvents: 'none' }} center>
+        <Html position={[0, dartLen * 2, 0]} style={{ pointerEvents: 'none' }} center zIndexRange={[20, 0]}>
           <div className="ingress-tag target">TARGET · CEP</div>
         </Html>
       </group>
@@ -151,9 +158,9 @@ export default function Ingress({ terrain, playing, onDone }) {
 
       <Html
         position={[plan.start.x, plan.start.y + dartLen * 3, plan.start.z]}
-        distanceFactor={terrain.scale * 0.6}
         style={{ pointerEvents: 'none' }}
         center
+        zIndexRange={[20, 0]}
       >
         <div className="ingress-tag">RADAR EXPOSURE {Math.round(plan.exposedFraction * 100)}%</div>
       </Html>

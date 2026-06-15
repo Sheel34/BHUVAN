@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, OrbitControls, Html } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, N8AO } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
@@ -263,11 +263,11 @@ function Lighting({ worldScale }) {
   const s = worldScale;
   return (
     <>
-      <ambientLight intensity={0.25} color="#ffeedd" />
+      <ambientLight intensity={0.16} color="#aab4cc" />
       <directionalLight
-        position={[s * 0.3, s * 0.4, s * 0.15]}
-        intensity={1.8}
-        color="#fff5e0"
+        position={[s * 0.6, s * 0.17, s * 0.32]}
+        intensity={2.4}
+        color="#fff3da"
         castShadow
         shadow-mapSize-width={4096}
         shadow-mapSize-height={4096}
@@ -285,16 +285,19 @@ function Lighting({ worldScale }) {
   );
 }
 
-function Effects() {
+function Effects({ worldScale }) {
+  // Ambient occlusion = the big realism unlock — contact shadows in craters,
+  // depth in the regolith. Then bloom + a filmic vignette.
   return (
     <EffectComposer multisampling={4}>
+      <N8AO halfRes aoRadius={worldScale * 0.06} distanceFalloff={0.6} intensity={2.6} color="#05060a" />
       <Bloom
-        intensity={0.28}
-        luminanceThreshold={0.7}
+        intensity={0.32}
+        luminanceThreshold={0.72}
         luminanceSmoothing={0.3}
         mipmapBlur
       />
-      <Vignette eskil={false} offset={0.15} darkness={0.8} />
+      <Vignette eskil={false} offset={0.18} darkness={0.92} />
     </EffectComposer>
   );
 }
@@ -413,7 +416,7 @@ export default function SceneCanvas({
       <TerrainInspectionControls target={inspectionTarget} worldScale={worldScale} />
 
       <PerfStats enabled={debugMode} />
-      <Effects />
+      <Effects worldScale={worldScale} />
     </Canvas>
   );
 }

@@ -125,7 +125,7 @@ export default function Rover({ terrain }) {
       </mesh>
       <pointLight ref={lightRef} position={[0, S * 1.7, 0]} distance={S * 12} color="#34d399" intensity={S * 3} />
 
-      <Html distanceFactor={worldScale * 0.5} position={[0, S * 3.4, 0]} style={{ pointerEvents: 'none' }} center>
+      <Html position={[0, S * 3.4, 0]} style={{ pointerEvents: 'none' }} center zIndexRange={[20, 0]}>
         <div className="twin-tag">BHUVAN-1 ROVER</div>
       </Html>
     </group>
