@@ -185,41 +185,39 @@ function Surround({ terrain, body }) {
   );
 }
 
-/* ── Space dome: a vast inward-facing shell so zooming out always shows
-   a star-flecked sky, never an empty black void. ── */
+/* ── Space dome: real Milky Way panorama (prebuilt CC-BY asset) on a vast
+   inward-facing shell. Photoreal deep-space sky, not procedural dots. ── */
 function SpaceDome({ worldScale }) {
   const tex = useMemo(() => {
-    const size = 1024;
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const ctx = c.getContext('2d');
-    // Deep-space vertical gradient
-    const g = ctx.createLinearGradient(0, 0, 0, size);
-    g.addColorStop(0, '#06070b');
-    g.addColorStop(0.5, '#0a0c12');
-    g.addColorStop(1, '#070809');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, size, size);
-    // Scattered stars
-    for (let i = 0; i < 1400; i++) {
-      const x = Math.random() * size;
-      const y = Math.random() * size;
-      const r = Math.random() * 1.3;
-      const a = 0.3 + Math.random() * 0.7;
-      ctx.fillStyle = `rgba(255,255,255,${a})`;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.mapping = THREE.EquirectangularReflectionMapping;
+    const t = new THREE.TextureLoader().load('/textures/2k_stars_milky_way.jpg');
+    t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }, []);
-
   return (
-    <mesh scale={[-1, 1, 1]}>
-      <sphereGeometry args={[worldScale * 30, 48, 48]} />
-      <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} />
+    <mesh scale={[-1, 1, 1]} renderOrder={-1}>
+      <sphereGeometry args={[worldScale * 38, 64, 64]} />
+      <meshBasicMaterial map={tex} side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false} />
+    </mesh>
+  );
+}
+
+/* ── A real planet hanging in the sky (prebuilt texture), lit by the sun →
+   a phase/crescent like the reference shots. On Earth show the Moon; on the
+   Moon/Mars show Earth. ── */
+const PLANET_TEX = { earth: '/textures/2k_earth_daymap.jpg', moon: '/textures/2k_moon.jpg', mars: '/textures/2k_mars.jpg' };
+function SkyBody({ body, worldScale }) {
+  const which = body === 'earth' ? 'moon' : 'earth';
+  const tex = useMemo(() => {
+    const t = new THREE.TextureLoader().load(PLANET_TEX[which]);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [which]);
+  const ref = useRef();
+  useFrame((_, dt) => { if (ref.current) ref.current.rotation.y += dt * 0.01; });
+  return (
+    <mesh ref={ref} position={[worldScale * 8, worldScale * 6.5, -worldScale * 12]}>
+      <sphereGeometry args={[worldScale * 1.6, 48, 48]} />
+      <meshStandardMaterial map={tex} roughness={1} metalness={0} />
     </mesh>
   );
 }
@@ -361,6 +359,7 @@ export default function SceneCanvas({
       <color attach="background" args={['#0b0c10']} />
       <Lighting worldScale={worldScale} />
       <SpaceDome worldScale={worldScale} />
+      <SkyBody body={body} worldScale={worldScale} />
       <Stars
         radius={worldScale * 22}
         depth={worldScale * 5}

@@ -347,11 +347,21 @@ function GlobeScene({ textureUrls, flight, onFlightDone, onSelectMission, onSurf
   const [hoveredSite, setHoveredSite] = useState(null);
   const textures = useMoonTextures(textureUrls);
   const explorationSites = useMemo(() => generateExplorationGrid(60), []);
+  const milkyway = useMemo(() => {
+    const t = new THREE.TextureLoader().load('/textures/2k_stars_milky_way.jpg');
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, []);
 
   if (!textures) return null;
 
   return (
     <>
+      {/* Real Milky Way backdrop (prebuilt CC-BY panorama). */}
+      <mesh scale={[-1, 1, 1]} renderOrder={-1}>
+        <sphereGeometry args={[90, 64, 64]} />
+        <meshBasicMaterial map={milkyway} side={THREE.BackSide} toneMapped={false} depthWrite={false} />
+      </mesh>
       <Sun />
       <Stars radius={70} depth={40} count={6000} factor={3.2} saturation={0} fade speed={0.4} />
       {/* No idle spin: markers are pinned to fixed lat/lon in world space,
