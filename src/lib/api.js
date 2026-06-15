@@ -493,6 +493,26 @@ export async function fetchAnalysisHistory() {
 
 
 
+export async function fetchDemRegion(lat, lon, zoom = 12) {
+
+  const raw = await requestJson(`${API_V1}/dem/fetch`, {
+
+    method: 'POST',
+
+    headers: { 'Content-Type': 'application/json' },
+
+    body: JSON.stringify({ lat, lon, zoom }),
+
+    timeoutMs: 60000,
+
+  });
+
+  return normalizeAnalysisPayload(adaptPayload(raw));
+
+}
+
+
+
 export async function analyzeUpload(file) {
 
   const formData = new FormData();

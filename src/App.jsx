@@ -13,6 +13,7 @@ import { inspectTerrainPoint } from './engine/terrain';
 import {
   analyzeSample,
   analyzeUpload,
+  fetchDemRegion,
   fetchSampleCatalog,
   fetchMoonTextures,
   generateReport,
@@ -123,6 +124,20 @@ export default function App() {
     } catch (error) {
       setAnalysisStatus('error');
       setAnalysisError(error.message || 'Analysis failed.');
+    }
+  }, [applyAnalysisResult]);
+
+  const handleLoadRegion = useCallback(async (lat, lon, zoom = 12) => {
+    setAnalysisStatus('loading');
+    setAnalysisError('');
+    try {
+      const result = await fetchDemRegion(lat, lon, zoom);
+      setBackendMode('online');
+      applyAnalysisResult(result);
+      setAnalysisStatus('ready');
+    } catch (error) {
+      setAnalysisStatus('error');
+      setAnalysisError(error.message || 'Real DEM fetch failed (needs backend online).');
     }
   }, [applyAnalysisResult]);
 
@@ -282,6 +297,7 @@ export default function App() {
         onViewModeChange={setViewMode}
         onAnalyzeSample={handleAnalyzeSample}
         onUpload={handleUpload}
+        onLoadRegion={handleLoadRegion}
         onSelectZone={handleSelectZoneById}
         onFocusInterestRegion={handleFocusInterestRegion}
         onGenerateReport={handleGenerateReport}

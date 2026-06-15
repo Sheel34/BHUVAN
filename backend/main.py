@@ -96,6 +96,12 @@ class AnalyzeRequest(BaseModel):
     ai_enhance: bool = False  # Whether to apply AI DEM enhancement
 
 
+class DemRequest(BaseModel):
+    lat: float
+    lon: float
+    zoom: int = 12
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
@@ -574,6 +580,23 @@ def analyze_sample(request: AnalyzeRequest):
 
     if request.ai_enhance:
         elevation, metadata = apply_ai_enhancement(elevation, metadata)
+
+    return build_payload(elevation, metadata)
+
+
+@app.post("/api/v1/dem/fetch", response_model=AnalysisPayload)
+def dem_fetch(req: DemRequest):
+    """Fetch a REAL DEM (AWS Terrain Tiles / SRTM+Copernicus) for a lat/lon and
+    run it through the full analysis pipeline. The accurate-terrain path."""
+    from data.dem_fetch import fetch_dem
+
+    try:
+        elevation, metadata = fetch_dem(req.lat, req.lon, req.zoom)
+    except Exception as exc:  # noqa: BLE001 — surface any fetch/decoding failure
+        raise HTTPException(
+            status_code=502,
+            detail=ErrorDetail(code="DEM_FETCH_FAILED", message=f"Could not fetch DEM: {exc}").model_dump(),
+        ) from exc
 
     return build_payload(elevation, metadata)
 

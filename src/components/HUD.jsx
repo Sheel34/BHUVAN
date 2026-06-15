@@ -66,6 +66,14 @@ function ClassificationBars({ classification }) {
   );
 }
 
+// Real Earth DEM presets (mountainous, terrain-following relevant).
+const REAL_REGIONS = [
+  { name: 'Grand Canyon', sub: 'USA · 2 km relief', lat: 36.10, lon: -112.11, zoom: 11 },
+  { name: 'Everest · Himalaya', sub: 'Nepal · extreme', lat: 27.99, lon: 86.92, zoom: 11 },
+  { name: 'Matterhorn · Alps', sub: 'Switzerland', lat: 45.98, lon: 7.66, zoom: 11 },
+  { name: 'Hindu Kush', sub: 'ridges & valleys', lat: 35.40, lon: 71.10, zoom: 11 },
+];
+
 const REPORT_KINDS = [
   ['summary', 'Terrain Summary'],
   ['surface', 'Surface Analysis'],
@@ -87,6 +95,7 @@ export default function HUD({
   onViewModeChange,
   onAnalyzeSample,
   onUpload,
+  onLoadRegion,
   onSelectZone,
   onFocusInterestRegion,
   onGenerateReport,
@@ -183,6 +192,22 @@ export default function HUD({
                 )) : (
                   <div className="hud-empty-state">No datasets in registry.</div>
                 )}
+              </div>
+            </div>
+
+            <div className="hud-section">
+              <div className="hud-section-label">REAL TERRAIN · DEM (SRTM)</div>
+              <div className="hud-action-list">
+                {REAL_REGIONS.map((r) => (
+                  <button
+                    key={r.name}
+                    className="hud-dataset-btn"
+                    onClick={() => onLoadRegion?.(r.lat, r.lon, r.zoom)}
+                  >
+                    <span className="hud-dataset-name">{r.name}</span>
+                    <span className="hud-dataset-sub">{r.sub}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
