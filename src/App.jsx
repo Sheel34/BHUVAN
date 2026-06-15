@@ -9,7 +9,7 @@ import MissionOps from './components/MissionOps';
 import SceneErrorBoundary from './components/SceneErrorBoundary';
 import SceneCanvas from './scene/SceneCanvas';
 import MoonGlobe from './scene/MoonGlobe';
-import { inspectTerrainPoint } from './engine/terrain';
+import { inspectTerrainPoint, deriveBody } from './engine/terrain';
 import {
   analyzeSample,
   analyzeUpload,
@@ -105,6 +105,7 @@ export default function App() {
   useEffect(() => () => stopAll(), []);
 
   const applyAnalysisResult = useCallback((result) => {
+    if (result?.terrain) result.terrain.body = deriveBody(result.metadata);
     setAnalysis(result);
     setReport(null);
     setTercom(null);

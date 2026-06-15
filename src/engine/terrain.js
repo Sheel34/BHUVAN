@@ -260,6 +260,38 @@ export function lunarColor(h, minH, maxH) {
 
 
 
+/* ── Earth surface: green lowlands → grey-brown highlands ── */
+
+export function earthColor(h, minH, maxH) {
+
+  const t = (h - minH) / (maxH - minH + 0.001);
+
+  return [0.28 + t * 0.34, 0.36 + t * 0.16, 0.24 + t * 0.22];
+
+}
+
+
+
+/* ── Which body the analyzed terrain belongs to (drives surface colour). ── */
+
+export function deriveBody(metadata) {
+
+  const src = (metadata?.source || '').toLowerCase();
+
+  const name = `${metadata?.source || ''} ${metadata?.terrainName || ''}`.toLowerCase();
+
+  if (/srtm|terrarium|geotiff/.test(src)) return 'earth';
+
+  if (/mars|jezero|gale|nili/.test(name)) return 'mars';
+
+  if (/moon|lunar|tycho|shackleton|tranquil|mare|pole/.test(name)) return 'moon';
+
+  return 'earth';
+
+}
+
+
+
 export function analysisColor(viewMode, value, terrain, height) {
 
   if (viewMode === 'hazard') return hazardColor(value);
@@ -272,7 +304,13 @@ export function analysisColor(viewMode, value, terrain, height) {
 
   if (viewMode === 'traversability') return [0.18 + value * 0.18, 0.25 + value * 0.7, 0.25 + value * 0.2];
 
-  // 'elevation' / 'surface' / default → photoreal lunar regolith
+  // 'elevation' / 'surface' / default → photoreal surface, coloured by body
+
+  const body = terrain.body || 'moon';
+
+  if (body === 'mars') return marsColor(height, terrain.minH, terrain.maxH);
+
+  if (body === 'earth') return earthColor(height, terrain.minH, terrain.maxH);
 
   return lunarColor(height, terrain.minH, terrain.maxH);
 

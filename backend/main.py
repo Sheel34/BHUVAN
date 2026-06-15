@@ -633,8 +633,8 @@ def tercom_run(req: TercomRequest):
         nx, nz = pt if (pt and len(pt) == 2) else default
         return ((nz + 0.5) * (size - 1), (nx + 0.5) * (size - 1))  # (gx=col, gy=row)
 
-    launch = to_grid(req.launch, [-0.40, -0.40])
-    target = to_grid(req.target, [0.36, 0.34])
+    launch = to_grid(req.launch, [-0.46, -0.46])
+    target = to_grid(req.target, [0.46, 0.46])
 
     result = simulate_tercom(elev_m, cell_m, launch, target, req.params or {})
     result["api_version"] = API_VERSION

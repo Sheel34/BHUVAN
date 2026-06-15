@@ -9,7 +9,8 @@ import Rover from './Rover';
 import Ingress from './Ingress';
 import TercomReplay from './TercomReplay';
 import { getRegolithMaps } from './lunarSurface';
-import { lunarSample, worldHeight } from '../engine/world';
+import { worldHeight } from '../engine/world';
+import { deriveBody } from '../engine/terrain';
 
 function TerrainInspectionControls({ target, worldScale = 200 }) {
   const controlsRef = useRef();
@@ -136,68 +137,49 @@ function InterestBeacon({ poi, terrain }) {
   );
 }
 
-/* ── Surrounding lunar plain: the analyzed patch sits inside a much
-   larger ground disc so its edges read as "more moon", not a cliff into
-   space. Fog swallows the far rim. ── */
-/* ── The lunar world: one finite surface around the analyzed patch — maria,
-   highlands and impact craters from the shared lunarSample() field, so it is
-   continuous with the patch (no floating tile) and reads as real Moon, not
-   random dunes. Vertex-coloured (dark mare / bright highland). Sized to fade
-   into the fogged horizon before the far plane — no square, no hard cut. ── */
-const GROUND_SEG = 384;
+/* ── Surrounding ground: a QUIET body-coloured plain the analyzed patch sits
+   in — NOT a second detailed terrain. Solid colour (Moon grey / Mars rust /
+   Earth green), faint regolith texture, gently curved to a round horizon. The
+   sharp analyzed patch is the only hero; this is just the floor around it. ── */
+const SURFACE_COLORS = { moon: '#6d6d73', mars: '#9c5a3a', earth: '#5f6b58' };
+const GROUND_SEG = 160;
 
-function LunarWorld({ terrain }) {
+function Surround({ terrain, body }) {
   const worldScale = terrain.scale;
   const maps = getRegolithMaps();
-  const { normalMap, roughnessMap } = useMemo(() => {
-    const n = maps.normal.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping;
-    const r = maps.roughness.clone(); r.needsUpdate = true; r.wrapS = r.wrapT = THREE.RepeatWrapping;
-    return { normalMap: n, roughnessMap: r };
+  const normalMap = useMemo(() => {
+    const n = maps.normal.clone();
+    n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping;
+    return n;
   }, [maps]);
 
   const geometry = useMemo(() => {
-    const size = worldScale * 24;
-    const curveR = worldScale * 45; // gentle curvature — horizon drop, not a ball
+    const size = worldScale * 22;
+    const curveR = worldScale * 50; // gentle horizon drop
+    const baseline = terrain.minH - worldScale * 0.004;
     const g = new THREE.PlaneGeometry(size, size, GROUND_SEG, GROUND_SEG);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position;
     const uv = g.attributes.uv;
-    const colors = new Float32Array(pos.count * 3);
-    const relief = Math.max(40, terrain.maxH - terrain.minH);
-    const detail = 60; // regolith repeats every 60 m
+    const detail = 80;
     for (let k = 0; k < pos.count; k++) {
       const x = pos.getX(k);
       const z = pos.getZ(k);
-      const { h, mare, cr } = lunarSample(terrain, x, z);
-      // Planet curvature: far terrain bends down so it drops below a round
-      // horizon (airless — no fog needed to hide the edge).
-      const drop = (x * x + z * z) / (2 * curveR);
-      pos.setY(k, h - drop);
+      pos.setY(k, baseline - (x * x + z * z) / (2 * curveR));
       uv.setXY(k, x / detail, z / detail);
-      const e = Math.max(0, Math.min(1, (h - terrain.minH) / (relief * 1.6)));
-      const crN = Math.max(-1, Math.min(1, cr / relief));
-      // Sharper albedo: strong mare/highland split, fresh-crater rims bright,
-      // bowls dark.
-      let base = 0.60 - mare * 0.42 + e * 0.10 + crN * 0.16;
-      base = Math.max(0.10, Math.min(0.96, base));
-      colors[k * 3] = base;
-      colors[k * 3 + 1] = base * 0.985;
-      colors[k * 3 + 2] = base * 0.95;
     }
-    g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     g.computeVertexNormals();
     return g;
-  }, [worldScale, terrain.minH, terrain.maxH]);
+  }, [worldScale, terrain.minH]);
 
   return (
     <mesh geometry={geometry} receiveShadow>
       <meshStandardMaterial
-        vertexColors
+        color={SURFACE_COLORS[body] || SURFACE_COLORS.earth}
         roughness={1}
         metalness={0}
         normalMap={normalMap}
-        normalScale={new THREE.Vector2(0.5, 0.5)}
-        roughnessMap={roughnessMap}
+        normalScale={new THREE.Vector2(0.22, 0.22)}
       />
     </mesh>
   );
@@ -320,6 +302,7 @@ export default function SceneCanvas({
   tercomResult = null,
 }) {
   const terrain = analysis?.terrain;
+  const body = terrain?.body || deriveBody(analysis?.metadata);
   const layers = analysis?.layers;
   const inspectionTarget = useMemo(() => {
     if (focusPoint) return [focusPoint.x, focusPoint.y, focusPoint.z];
@@ -388,7 +371,7 @@ export default function SceneCanvas({
         speed={0.2}
       />
 
-      {terrain && <LunarWorld terrain={terrain} />}
+      {terrain && <Surround terrain={terrain} body={body} />}
       {terrain && <CameraFloor terrain={terrain} />}
 
       <group onClick={handleClick} onPointerMove={handlePointerMove}>

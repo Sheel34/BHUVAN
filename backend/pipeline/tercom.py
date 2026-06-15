@@ -35,8 +35,8 @@ def simulate_tercom(elev_m, cell_m, launch, target, params=None):
     dict with normalised trajectory points + fixes + verdict."""
     p = params or {}
     rng = np.random.default_rng(int(p.get("seed", 7)))
-    agl = float(p.get("cruise_agl_m", 220.0))
-    fix_count = int(p.get("fix_count", 4))
+    agl = float(p.get("cruise_agl_m", 320.0))
+    fix_count = int(p.get("fix_count", 5))
     drift_km = float(p.get("drift_per_km_m", 55.0))   # INS error growth, m / km
     alt_noise = float(p.get("alt_noise_m", 6.0))
     min_clear = float(p.get("min_clearance_m", 12.0))
