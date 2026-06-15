@@ -7,6 +7,7 @@ import TerrainChunked from './TerrainChunked';
 import PerfStats from './PerfStats';
 import Rover from './Rover';
 import Ingress from './Ingress';
+import TercomReplay from './TercomReplay';
 import { getRegolithMaps } from './lunarSurface';
 import { lunarSample, worldHeight } from '../engine/world';
 
@@ -316,6 +317,7 @@ export default function SceneCanvas({
   onGlReady,
   ingressPlaying = false,
   onIngressDone,
+  tercomResult = null,
 }) {
   const terrain = analysis?.terrain;
   const layers = analysis?.layers;
@@ -397,7 +399,10 @@ export default function SceneCanvas({
       {terrain && <Rover terrain={terrain} />}
 
       {/* Nap-of-the-earth ingress: radar-masked route + cinematic fly-through. */}
-      {terrain && <Ingress terrain={terrain} playing={ingressPlaying} onDone={onIngressDone} />}
+      {terrain && !tercomResult && <Ingress terrain={terrain} playing={ingressPlaying} onDone={onIngressDone} />}
+
+      {/* TERCOM mission replay — real backend trajectory + verdict. */}
+      {terrain && tercomResult && <TercomReplay terrain={terrain} result={tercomResult} />}
 
       {landingTarget && (
         <LandingMarker

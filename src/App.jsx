@@ -14,6 +14,7 @@ import {
   analyzeSample,
   analyzeUpload,
   fetchDemRegion,
+  runTercom,
   fetchSampleCatalog,
   fetchMoonTextures,
   generateReport,
@@ -47,6 +48,9 @@ export default function App() {
   const [flyToMission, setFlyToMission] = useState(null);
   const [clientGpu, setClientGpu] = useState(null);
   const [ingressPlaying, setIngressPlaying] = useState(false);
+  const [currentRegion, setCurrentRegion] = useState(null);
+  const [tercom, setTercom] = useState(null);
+  const [missionStatus, setMissionStatus] = useState('idle');
 
   const handleGlReady = useCallback((gl) => {
     setClientGpu(readWebGLGpu(gl));
@@ -103,6 +107,9 @@ export default function App() {
   const applyAnalysisResult = useCallback((result) => {
     setAnalysis(result);
     setReport(null);
+    setTercom(null);
+    setCurrentRegion(null);
+    setMissionStatus('idle');
     const topZone = result?.landingZones?.[0] || null;
     setSelectedZoneId(topZone?.id || null);
     const initialPoint = topZone
@@ -134,12 +141,28 @@ export default function App() {
       const result = await fetchDemRegion(lat, lon, zoom);
       setBackendMode('online');
       applyAnalysisResult(result);
+      setCurrentRegion({ lat, lon, zoom });
       setAnalysisStatus('ready');
     } catch (error) {
       setAnalysisStatus('error');
       setAnalysisError(error.message || 'Real DEM fetch failed (needs backend online).');
     }
   }, [applyAnalysisResult]);
+
+  // Run the TERCOM guidance sim (backend) on the loaded real-DEM region.
+  const handleRunMission = useCallback(async () => {
+    if (!currentRegion) return;
+    setMissionStatus('loading');
+    setAnalysisError('');
+    try {
+      const res = await runTercom(currentRegion.lat, currentRegion.lon, currentRegion.zoom);
+      setTercom(res);
+      setMissionStatus('ready');
+    } catch (error) {
+      setMissionStatus('error');
+      setAnalysisError(error.message || 'Mission sim failed (needs backend online).');
+    }
+  }, [currentRegion]);
 
   const handleUpload = useCallback(async (file) => {
     if (!file) return;
@@ -272,15 +295,28 @@ export default function App() {
           onGlReady={handleGlReady}
           ingressPlaying={ingressPlaying}
           onIngressDone={() => setIngressPlaying(false)}
+          tercomResult={tercom}
         />
       </SceneErrorBoundary>
       <button
         className="ingress-btn"
-        onClick={() => setIngressPlaying(true)}
-        disabled={ingressPlaying}
+        disabled={ingressPlaying || missionStatus === 'loading'}
+        onClick={() => { if (currentRegion) handleRunMission(); else setIngressPlaying(true); }}
       >
-        {ingressPlaying ? '◣ INGRESS RUNNING…' : '▶ RUN NAP-OF-EARTH INGRESS'}
+        {missionStatus === 'loading'
+          ? '◣ PLOTTING MISSION…'
+          : currentRegion
+            ? '▶ RUN MISSION · TERCOM'
+            : (ingressPlaying ? '◣ INGRESS RUNNING…' : '▶ RUN NAP-OF-EARTH INGRESS')}
       </button>
+      {tercom && (
+        <div className={`mission-result ${tercom.verdict.toLowerCase()}`}>
+          <button className="mr-close" onClick={() => setTercom(null)} title="Clear">✕</button>
+          <div className="mr-verdict">{tercom.verdict}</div>
+          <div className="mr-row">MISS {Math.round(tercom.miss_m)} m &nbsp;·&nbsp; CEP {Math.round(tercom.cep_m)} m</div>
+          <div className="mr-row">{(tercom.fixes || []).length} TERCOM FIXES &nbsp;·&nbsp; {tercom.steps} STEPS</div>
+        </div>
+      )}
       <pre id="perf-stats" className="perf-stats" />
       <SystemMonitor clientGpu={clientGpu} />
       <HUD
