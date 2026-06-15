@@ -513,6 +513,24 @@ export async function fetchDemRegion(lat, lon, zoom = 12) {
 
 
 
+export async function runTercom(lat, lon, zoom = 12, launch = null, target = null, params = null) {
+
+  return requestJson(`${API_V1}/tercom/run`, {
+
+    method: 'POST',
+
+    headers: { 'Content-Type': 'application/json' },
+
+    body: JSON.stringify({ lat, lon, zoom, launch, target, params }),
+
+    timeoutMs: 90000,
+
+  });
+
+}
+
+
+
 export async function analyzeUpload(file) {
 
   const formData = new FormData();

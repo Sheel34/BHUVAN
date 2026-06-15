@@ -102,6 +102,15 @@ class DemRequest(BaseModel):
     zoom: int = 12
 
 
+class TercomRequest(BaseModel):
+    lat: float
+    lon: float
+    zoom: int = 12
+    launch: Optional[list[float]] = None   # [nx, nz] render fractions
+    target: Optional[list[float]] = None
+    params: Optional[dict] = None
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str
@@ -599,6 +608,41 @@ def dem_fetch(req: DemRequest):
         ) from exc
 
     return build_payload(elevation, metadata)
+
+
+@app.post("/api/v1/tercom/run")
+def tercom_run(req: TercomRequest):
+    """Run the TERCOM guidance simulation on a real DEM for this lat/lon.
+    Returns trajectory + fix events + verdict (HIT/MISS/CFIT/LOST)."""
+    from data.dem_fetch import fetch_dem
+    from pipeline.tercom import simulate_tercom
+
+    try:
+        norm, meta = fetch_dem(req.lat, req.lon, req.zoom)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=ErrorDetail(code="DEM_FETCH_FAILED", message=f"Could not fetch DEM: {exc}").model_dump(),
+        ) from exc
+
+    elev_m = norm * meta["height_scale_m"]
+    size = int(elev_m.shape[0])
+    cell_m = meta["resolution_m_per_px"]
+
+    def to_grid(pt, default):
+        nx, nz = pt if (pt and len(pt) == 2) else default
+        return ((nz + 0.5) * (size - 1), (nx + 0.5) * (size - 1))  # (gx=col, gy=row)
+
+    launch = to_grid(req.launch, [-0.40, -0.40])
+    target = to_grid(req.target, [0.36, 0.34])
+
+    result = simulate_tercom(elev_m, cell_m, launch, target, req.params or {})
+    result["api_version"] = API_VERSION
+    result["dem"] = {
+        "lat": req.lat, "lon": req.lon, "zoom": req.zoom,
+        "world_scale_m": meta["world_scale_m"], "height_scale_m": meta["height_scale_m"],
+    }
+    return result
 
 
 @app.post("/api/v1/analyze-upload", response_model=AnalysisPayload)
