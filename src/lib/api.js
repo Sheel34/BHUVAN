@@ -515,6 +515,26 @@ export async function fetchDemRegion(lat, lon, zoom = 12) {
 
 
 
+export async function analyzeEdgeDepth(grid, meta = {}) {
+
+  const raw = await requestJson(`${API_V1}/analyze-edge`, {
+
+    method: 'POST',
+
+    headers: { 'Content-Type': 'application/json' },
+
+    body: JSON.stringify({ grid, ...meta }),
+
+    timeoutMs: 60000,
+
+  });
+
+  return normalizeAnalysisPayload(adaptPayload(raw));
+
+}
+
+
+
 export async function runTercom(lat, lon, zoom = 12, launch = null, target = null, params = null) {
 
   return requestJson(`${API_V1}/tercom/run`, {
@@ -544,6 +564,7 @@ export async function analyzeUpload(file) {
     method: 'POST',
 
     body: formData,
+    timeoutMs: 120000,
 
   });
 
