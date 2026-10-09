@@ -178,13 +178,17 @@ export default memo(function TerrainChunked({ terrain,layers,viewMode,colorMap,o
           float regolithNoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
             return mix(mix(mix(regolithHash(i),regolithHash(i+vec3(1,0,0)),f.x),mix(regolithHash(i+vec3(0,1,0)),regolithHash(i+vec3(1,1,0)),f.x),f.y),mix(mix(regolithHash(i+vec3(0,0,1)),regolithHash(i+vec3(1,0,1)),f.x),mix(regolithHash(i+vec3(0,1,1)),regolithHash(i+vec3(1,1,1)),f.x),f.y),f.z);}
         `).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
-          vec3 finePosition=grainPosition*20.0;
+          vec3 finePosition=grainPosition*18.0;
           float footprint=length(fwidth(finePosition));
-          float grain=regolithNoise(finePosition)*0.004/(1.0+footprint*footprint);
+          float grain=regolithNoise(finePosition)*0.006/(1.0+footprint*footprint);
+          float coarseFootprint=length(fwidth(grainPosition*2.5));
+          grain+=regolithNoise(grainPosition*2.5)*0.009/(1.0+coarseFootprint*coarseFootprint);
           vec3 sx=dFdx(-vViewPosition),sy=dFdy(-vViewPosition);
           vec3 rx=cross(sy,normal),ry=cross(normal,sx);
           float determinant=dot(sx,rx)*faceDirection;
           normal=normalize(max(abs(determinant),1e-8)*normal-sign(determinant)*(dFdx(grain)*rx+dFdy(grain)*ry));
+        `).replace('#include <roughnessmap_fragment>',`#include <roughnessmap_fragment>
+          roughnessFactor=clamp(roughnessFactor*(.92+.08*regolithNoise(grainPosition*3.0)),.7,1.0);
         `);
       };
       m.customProgramCacheKey = () => `terrain-grain-${environment.microtexture}-${Boolean(imagery)}-${terrain.scale}-${environment.snow}-${environment.snowLine}`;

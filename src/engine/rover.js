@@ -2,6 +2,7 @@ import { vehicleWheels } from './vehicleProfiles.js';
 import { sampleHeight, sampleRaster } from './terrain.js';
 import { RemoteTileSource, windowValue } from './tileSource.js';
 import { triangleHeight, roverGroundSupport } from './surfacePlacement.js';
+import { hasRehearsalScale, terrainWindowExtrema } from './imageRehearsal.js';
 
 export const DEFAULT_ROVER = Object.freeze({ profileId: 'generic', obstacleWidth: .5, speed: 1, maxSlope: 25, maxHazard: .8 });
 
@@ -15,31 +16,38 @@ function queue() {
 }
 
 export function planGridRoute(terrain, layers, start, goal, settings=DEFAULT_ROVER, obstacles=[], environment={}) {
-  const count=Math.min(129,terrain.size), cell=terrain.scale/(count-1), half=terrain.scale/2;
+  const count=Math.min(settings.planningCount||129,terrain.size), cell=terrain.scale/(count-1), half=terrain.scale/2;
   const index=(x,z)=>Math.round((x+half)/cell)*count+Math.round((z+half)/cell);
   for(const point of [start,goal]) if(![point[0],point[2]].every(Number.isFinite) || Math.max(Math.abs(point[0]),Math.abs(point[2]))>half) throw new Error('Rover and objective must lie inside this dataset.');
   const total=count*count, heights=new Float64Array(total), hazards=new Float32Array(total), blocked=new Uint8Array(total);
+  const stride=(terrain.size-1)/(count-1),nativeCell=terrain.scale/(terrain.size-1);
+  const wheelRadius=Math.max(...vehicleWheels(settings.profileId).map(([x,z])=>Math.hypot(x,z)));
+  const pooled=layers?.hazard?.length===terrain.size**2?
+    terrainWindowExtrema(Float32Array.from(layers.hazard,v=>Number.isFinite(v)?v:1),terrain.size,
+      Math.min(terrain.size-1,Math.ceil(stride/2+wheelRadius/nativeCell)),true):null;
   for(let i=0;i<count;i++) for(let j=0;j<count;j++) {
     const k=i*count+j,x=i*cell-half,z=j*cell-half;
     heights[k]=sampleHeight(terrain,x,z);let hazard=sampleRaster(layers?.hazard,terrain,x,z);
     // Preserve resolved hazards between the coarser planning nodes. Averaging
     // or point sampling can erase a small pit before A* ever sees it.
-    if(terrain.size>count&&layers?.hazard?.length===terrain.size**2) {
-      const stride=(terrain.size-1)/(count-1),radius=stride/2;
-      const loX=Math.max(0,Math.floor(i*stride-radius)),hiX=Math.min(terrain.size-1,Math.ceil(i*stride+radius));
-      const loZ=Math.max(0,Math.floor(j*stride-radius)),hiZ=Math.min(terrain.size-1,Math.ceil(j*stride+radius));
-      hazard=0;
-      for(let a=loX;a<=hiX;a++)for(let b=loZ;b<=hiZ;b++) {
-        const value=layers.hazard[a*terrain.size+b];
-        hazard=Math.max(hazard,Number.isFinite(value)?value:1);
-      }
-    }
+    if(pooled)hazard=pooled[Math.round(i*stride)*terrain.size+Math.round(j*stride)];
     hazards[k]=Number.isFinite(hazard)?hazard:1;
     blocked[k]=!Number.isFinite(heights[k]) || !Number.isFinite(hazard) || hazards[k]>(settings.maxHazard ?? .8)
       || (environment.water && terrain.body==='earth' && heights[k]+(terrain.elevationOrigin||0)<environment.waterLevel)
       || obstacles.some(o=>Math.hypot(x-o.position[0],z-o.position[2])<(o.constraints?.radius ?? (o.type==='HAZARD REGION'?cell*1.5:6))+cell*.5);
   }
   const source=index(start[0],start[2]),destination=index(goal[0],goal[2]);
+  const separation=new Float32Array(total);
+  // Encourage genuinely separate corridors without changing exclusion limits.
+  // Leave the common start/end approaches free of this preference penalty.
+  for(const path of settings.avoidPaths||[])for(const p of path) {
+    const i=Math.round((p[0]+half)/cell),j=Math.round((p[2]+half)/cell);
+    for(let a=Math.max(0,i-3);a<=Math.min(count-1,i+3);a++)for(let b=Math.max(0,j-3);b<=Math.min(count-1,j+3);b++) {
+      const x=a*cell-half,z=b*cell-half;
+      if(Math.min(Math.hypot(x-start[0],z-start[2]),Math.hypot(x-goal[0],z-goal[2]))<cell*4)continue;
+      separation[a*count+b]=Math.max(separation[a*count+b],Math.max(0,1-Math.hypot(a-i,b-j)/3)*8);
+    }
+  }
   if(blocked[source]||blocked[destination]) {
     const k=blocked[source]?source:destination,name=blocked[source]?'Rover start':'Destination';
     if(!Number.isFinite(heights[k])||!Number.isFinite(sampleRaster(layers?.hazard,terrain,Math.floor(k/count)*cell-half,k%count*cell-half)))
@@ -63,7 +71,8 @@ export function planGridRoute(terrain, layers, start, goal, settings=DEFAULT_ROV
       const horizontal=cell*Math.hypot(di,dj),rise=heights[next]-heights[current];
       const slope=Math.atan2(Math.abs(rise),horizontal)*180/Math.PI;
       if(slope>slopeLimit)continue;
-      const candidate=cost[current]+Math.hypot(horizontal,rise)*(1+hazards[next]*4+(slope/Math.max(1,slopeLimit))**2);
+      const candidate=cost[current]+Math.hypot(horizontal,rise)*(1+hazards[next]*(settings.hazardWeight??4)
+        +(slope/Math.max(1,slopeLimit))**2*(settings.gradeWeight??1)+separation[next]);
       if(candidate>=cost[next])continue;cost[next]=candidate;previous[next]=current;open.push({id:next,cost:candidate+heuristic(next)});
     }
   }
@@ -79,7 +88,7 @@ export function planGridRoute(terrain, layers, start, goal, settings=DEFAULT_ROV
 // cancelling route preparation. An overview proposes a route; native windows
 // then attach and check it, without inventing detail between source samples.
 export async function prepareRoverRoute(analysis, vehicle, objective, settings, objects=[], environment={}, signal) {
-  if(analysis.metadata?.provenance?.metric!==true)throw new Error('The metre-sized rover needs a metric DEM. Uncalibrated image depth cannot define physical wheel placement or speed.');
+  if(!hasRehearsalScale(analysis))throw new Error('Choose a metric DEM or assign an assumed image rehearsal scale.');
   if(!Number.isFinite(settings.speed)||settings.speed<=0||!Number.isFinite(settings.maxSlope)||settings.maxSlope<=0||!Number.isFinite(settings.maxHazard)||settings.maxHazard<0||settings.maxHazard>1)throw new Error('Rover speed, grade and hazard limits must be finite and valid.');
   const terrain=analysis.terrain;
   const source=terrain.stream ? new RemoteTileSource(terrain.stream,{maxTiles:96,maxBytes:64*1024*1024}) : null;
@@ -96,7 +105,8 @@ export async function prepareRoverRoute(analysis, vehicle, objective, settings, 
     signal?.throwIfAborted();
     const obstacles=[...objects.filter(o=>o.type==='HAZARD REGION'||o.type==='FACILITY'||o.type==='STATION'),
       ...(environment.features||[]).filter(f=>['rocks','buildings'].includes(f.kind)).map(f=>({position:[f.x,0,f.z],constraints:{radius:f.size*.71+1.3}}))];
-    const proposed=planGridRoute(planning,layers,vehicle.position,objective.position,settings,obstacles,environment);
+    const planningSettings={...settings,planningCount:analysis.metadata?.rehearsalScale?257:settings.planningCount};
+    const proposed=planGridRoute(planning,layers,vehicle.position,objective.position,planningSettings,obstacles,environment);
     const step=terrain.scale/(terrain.size-1)/2,coordinates=[];
     for(let k=1;k<proposed.path.length;k++) {
       const a=proposed.path[k-1],b=proposed.path[k],n=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[2]-a[2])/step));
@@ -125,7 +135,7 @@ export async function prepareRoverRoute(analysis, vehicle, objective, settings, 
       return triangleHeight(get(0,0),get(1,0),get(0,1),get(1,1),a,b);
     };
     const path=coordinates.map(([x,z])=>[x,nativeHeight(x,z),z]);
-    let distance=0,maxSlope=0,maxHazard=0,maxRoll=0,maxUnsupportedHeight=0;const cumulative=[0],supports=[];
+    let distance=0,maxSlope=0,maxHazard=0,maxRoll=0,maxUnsupportedHeight=0,hazardSum=0;const cumulative=[0],supports=[];
     for(let k=0;k<path.length;k++) {
       const p=path[k];if(!Number.isFinite(p[1]))throw new Error('Native elevation is missing along the route.');
       const next=path[Math.min(k+1,path.length-1)],previous=path[Math.max(k-1,0)];
@@ -134,18 +144,57 @@ export async function prepareRoverRoute(analysis, vehicle, objective, settings, 
       maxRoll=Math.max(maxRoll,Math.abs(support.roll)*180/Math.PI);maxUnsupportedHeight=Math.max(maxUnsupportedHeight,support.unsupportedHeight);
       if(obstacles.some(o=>Math.hypot(p[0]-o.position[0],p[2]-o.position[2])<(o.constraints?.radius ?? (o.type==='HAZARD REGION'?proposed.planningGsd*1.5:6))))throw new Error('Native corridor crosses a facility or hazard exclusion. Move the objective or enlarge the exclusion.');
       const i=Math.round((p[0]/terrain.scale+.5)*(terrain.size-1)),j=Math.round((p[2]/terrain.scale+.5)*(terrain.size-1));
-      const hazard=source ? source.sample('hazard',i,j) : sampleRaster(analysis.layers?.hazard,terrain,p[0],p[2]);
+      const contactHazards=support.contacts.map(contact=> {
+        const row=Math.round((contact.worldX/terrain.scale+.5)*(terrain.size-1));
+        const column=Math.round((contact.worldZ/terrain.scale+.5)*(terrain.size-1));
+        return source?source.sample('hazard',row,column):sampleRaster(analysis.layers?.hazard,terrain,contact.worldX,contact.worldZ);
+      });
+      const hazard=Math.max(source ? source.sample('hazard',i,j) : sampleRaster(analysis.layers?.hazard,terrain,p[0],p[2]),...contactHazards);
       if(!Number.isFinite(hazard))throw new Error('Native hazard raster is missing along the route.');
       maxHazard=Math.max(maxHazard,hazard);
+      hazardSum+=hazard;
       if(environment.water && terrain.body==='earth' && p[1]+(terrain.elevationOrigin||0)<environment.waterLevel)throw new Error('Native route crosses the scenario water level.');
       if(k) { const a=path[k-1],h=Math.hypot(p[0]-a[0],p[2]-a[2]);distance+=Math.hypot(h,p[1]-a[1]);cumulative.push(distance);maxSlope=Math.max(maxSlope,Math.atan2(Math.abs(p[1]-a[1]),h)*180/Math.PI); }
     }
     if(maxSlope>settings.maxSlope+.01 || maxHazard>settings.maxHazard+.001)throw new Error(`Native route check failed: ${maxSlope.toFixed(1)}° maximum grade, ${maxHazard.toFixed(2)} hazard. Move the objective or change the limits.`);
     if(source)retainedHeightTiles=new Map([...source.cache].filter(([key])=>key.startsWith('0/')).map(([key,window])=>[key,{...window,fields:{height:Float32Array.from(window.fields.height)}}]));
-    return { ...proposed,path,supports,cumulative,distance,maxSlope,maxHazard,maxRoll,maxUnsupportedHeight,groundHeight:nativeHeight,vehicleId:vehicle.id,objectiveId:objective.id,
+    return { ...proposed,path,supports,cumulative,distance,maxSlope,maxHazard,meanHazard:hazardSum/path.length,maxRoll,maxUnsupportedHeight,groundHeight:nativeHeight,vehicleId:vehicle.id,objectiveId:objective.id,
       profileId:settings.profileId,wheels:vehicleWheels(settings.profileId),speed:settings.speed,sourceGsd:terrain.scale/(terrain.size-1),metric:analysis.metadata?.provenance?.metric===true,
-      fidelity:analysis.metadata?.provenance?.status||'UNKNOWN',model:'kinematic route rehearsal; native DEM triangles and six-point ground support; no wheel/soil dynamics' };
+      fidelity:analysis.metadata?.rehearsalScale?'ESTIMATED · ASSUMED SCALE':analysis.metadata?.provenance?.status||'UNKNOWN',
+      assumedScale:analysis.metadata?.rehearsalScale||null,model:'kinematic route rehearsal; source triangles and six-point ground support; no wheel/soil dynamics' };
   } finally {source?.dispose();}
+}
+
+export function routeOverlap(a,b) {
+  const cell=Math.max(a.planningGsd,b.planningGsd),keys=new Set();
+  for(const p of a.path)keys.add(`${Math.round(p[0]/cell)}:${Math.round(p[2]/cell)}`);
+  const other=new Set(b.path.map(p=>`${Math.round(p[0]/cell)}:${Math.round(p[2]/cell)}`));
+  let common=0;for(const key of other)if(keys.has(key))common++;
+  return common/Math.max(1,Math.min(keys.size,other.size));
+}
+
+export async function prepareRoverRoutes(analysis,vehicle,objective,settings,objects=[],environment={},signal) {
+  const choices=[],accepted=[];
+  for(const preference of [
+    {id:'direct',label:'Direct',hazardWeight:1,gradeWeight:.25},
+    {id:'hazard',label:'Hazard priority',hazardWeight:16,gradeWeight:1},
+    {id:'grade',label:'Grade priority',hazardWeight:4,gradeWeight:8},
+  ]) {
+    signal?.throwIfAborted();
+    // Yield between searches so cancellation and the busy state can paint.
+    await new Promise(resolve=>setTimeout(resolve,0));
+    try {
+      const route=await prepareRoverRoute(analysis,vehicle,objective,{...settings,...preference,
+        avoidPaths:accepted.map(r=>r.path)},objects,environment,signal);
+      if(accepted.some(r=>routeOverlap(r,route)>.8))choices.push({...preference,reason:'No separate corridor under these limits.'});
+      else {accepted.push(route);choices.push({...preference,route});}
+    } catch(error) {
+      if(signal?.aborted||error.name==='AbortError')throw error;
+      choices.push({...preference,reason:error.message});
+    }
+  }
+  if(!accepted.length)throw new Error(choices[0].reason);
+  return choices;
 }
 
 export function roverPose(route,elapsed) {
@@ -167,7 +216,7 @@ export function roverPose(route,elapsed) {
 }
 
 export function traverseCSV(route,elevationOrigin=0) {
-  return ['elapsed_s,distance_m,local_x_m,local_z_m,dem_elevation_m,chassis_support_elevation_m,pitch_deg,roll_deg,unsupported_wheel_height_m',
+  return [`elapsed_s,distance_m,local_x_m,local_z_m,${route.assumedScale?'assumed_surface_height_m':'dem_elevation_m'},chassis_support_elevation_m,pitch_deg,roll_deg,unsupported_wheel_height_m`,
     ...route.path.map((p,k)=>[route.cumulative[k]/route.speed,route.cumulative[k],p[0],p[2],p[1]+elevationOrigin,
       (route.supports?.[k]?.centerHeight??p[1])+elevationOrigin,(route.supports?.[k]?.pitch||0)*180/Math.PI,
       (route.supports?.[k]?.roll||0)*180/Math.PI,route.supports?.[k]?.unsupportedHeight||0].map(v=>v.toFixed(6)).join(','))].join('\n');

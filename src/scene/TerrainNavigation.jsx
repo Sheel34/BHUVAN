@@ -27,7 +27,8 @@ export default function TerrainNavigation({ terrain, ready, focusPoint, vertical
       THREE.MathUtils.clamp(point.z, -half, half));
     const offset = camera.position.clone().sub(ref.current.target);
     const distance = offset.length();
-    const closer = mode === 'focus' ? Math.max(limits.minDistance * 1.5, Math.min(distance * .48, terrain.scale * .18)) : distance;
+    const closer = mode === 'object' ? Math.max(limits.minDistance*1.05,9)
+      : mode === 'focus' ? Math.max(limits.minDistance * 1.5, Math.min(distance * .48, terrain.scale * .18)) : distance;
     tween.current = { elapsed: 0, from: ref.current.target.clone(), destination,
       fromCamera: camera.position.clone(), toCamera: destination.clone().add(offset.multiplyScalar(closer / distance)),
       duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? .01 : .35 };

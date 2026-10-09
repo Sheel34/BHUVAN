@@ -7,6 +7,7 @@ import { networkMetrics } from '../lib/api';
 import { terrainDisplayMetadata } from '../engine/terrainNavigation';
 import { EnvironmentPanel, ScenarioPanel } from './WorkspacePanels';
 import BhuvanMark from './BhuvanMark';
+import { hasRehearsalScale } from '../engine/imageRehearsal';
 
 function formatNum(n, decimals = 1) {
   return Number.isFinite(n) ? n.toFixed(decimals) : '--';
@@ -18,7 +19,7 @@ function LayerLegend({ viewMode, analysis, settings, point }) {
   );
   const legend = LAYER_PALETTES[viewMode] || LAYER_PALETTES.elevation;
   const elevation = analysis?.intelligence?.elevation;
-  const metric = analysis?.metadata?.provenance?.metric === true;
+  const metric = hasRehearsalScale(analysis);
   const unit = metric ? 'm' : 'rel';
   const model = analysis?.metadata?.analysisModel;
   const physical = metric && typeof model?.[viewMode] === 'object' && Number.isFinite(model[viewMode].max) && model[viewMode];
@@ -119,6 +120,7 @@ export default function HUD({
   clockState, onClock, scenarioObjects, selectedObjectId, onSelectObject, placement, onPlacement,
   onObjectMove, onObjectRotate, onObjectConstraint, scenarioError, scenarioBusy,
   environment, onEnvironmentChange, roverRoute, roverTelemetry, roverSettings, onRoverSettings,
+  routeChoices,onRouteChoice,onImageScale,
   roverView, onRoverView, onPlanRoute, onDemoScenario, wideArea, onWideArea, regionSizeKm, onRegionSizeChange, onAcquireSite,
 }) {
   const mobile = useMobileQuality();
@@ -158,7 +160,8 @@ export default function HUD({
   const toggleRight = () => { const next = !rightOpen; close(); setRightOpen(next); };
   const toggleInfo = () => { const next = !infoOpen; close(); setInfoOpen(next); };
   const provenance = analysis?.metadata?.provenance;
-  const metric = provenance?.metric === true;
+  const metric = hasRehearsalScale(analysis);
+  const measuredMetric=provenance?.metric===true;
   const unit = metric ? 'm' : 'rel';
   const model = analysis?.metadata?.analysisModel;
   const status = provenance?.status || 'UNKNOWN';
@@ -179,7 +182,7 @@ export default function HUD({
             <span className="hud-version">SURFACE WORKSPACE</span>
           </div>
           {backendMode === 'online' && <span className="liquid-api-status"><i /> API connected</span>}
-          {backendMode !== 'online' && (
+          {backendMode!=='online'&&analysis?.metadata?.rehearsalScale?<span className="liquid-local-status">LOCAL REHEARSAL</span>:backendMode !== 'online' && (
             <div className={`hud-conn-indicator ${backendMode}`}>
               <span className="conn-dot" />
               {backendMode === 'error' ? 'OFFLINE' : '…'}
@@ -255,6 +258,7 @@ export default function HUD({
 
       {analysis && !anyOpen && <div className="dataset-fidelity" title={provenance?.reference}>
         <span className={`fidelity-badge ${status.toLowerCase()}`}>{status}</span>
+        {analysis.metadata?.rehearsalScale&&<span> ASSUMED SCALE · </span>}
         {provenance?.analysis_gsd ? `ANALYSIS ${formatNum(provenance.analysis_gsd, 2)} m/cell` : analysis.terrain?.stream ? 'NO ANALYSIS' : 'UNCALIBRATED SCALE'}
         {displayGsd && (analysis.terrain?.stream || !metric || displayGsd > provenance?.analysis_gsd) ? ` · DISPLAY ${formatNum(displayGsd, metric ? 2 : 4)} ${unit}/cell` : ''}
         {display && <span className="physical-extent"> · {metric ? `${formatNum(display.physicalExtent[0] / 1000, 2)} × ${formatNum(display.physicalExtent[1] / 1000, 2)} km · ${formatNum(display.physicalExtent[0]*display.physicalExtent[1]/1e6,2)} km²` : 'RELATIVE SCALE'} · {verticalExaggeration.toFixed(1)}× VISUAL</span>}
@@ -332,14 +336,14 @@ export default function HUD({
                   type="file"
                   accept="image/*,.tif,.tiff,.geotiff"
                   aria-label="Upload terrain or DEM"
-                  disabled={backendMode !== 'online'}
+                  disabled={analysisStatus==='loading'}
                   onChange={(e) => onUpload(e.target.files?.[0])}
                 />
                 <span className="hud-upload-label">
-                  {backendMode === 'online' ? 'UPLOAD TERRAIN / DEM' : 'REQUIRES BACKEND'}
+                  UPLOAD IMAGE / DEM
                 </span>
               </label>
-              <p className="assumption">A plain photo keeps its original colours, but its height remains uncalibrated. An image alone cannot supply exact elevation.</p>
+              <p className="assumption">Photos → on-device depth + original colours. Rehearsal uses editable assumed dimensions. GeoTIFF needs the terrain API.</p>
               <label className="workspace-field">MEASURED DEM<input aria-label="Paired DEM GeoTIFF" type="file" accept=".tif,.tiff" onChange={e=>setPairedDem(e.target.files?.[0]||null)}/></label>
               <label className="workspace-field">CO-REGISTERED ORTHOPHOTO<input aria-label="Paired orthophoto GeoTIFF" type="file" accept=".tif,.tiff" onChange={e=>setPairedImage(e.target.files?.[0]||null)}/></label>
               <button className="hud-action-btn" disabled={!pairedDem||!pairedImage||backendMode!=='online'||analysisStatus==='loading'} onClick={()=>onUpload(pairedDem,pairedImage)}>LOAD DEM + ORIGINAL IMAGERY</button>
@@ -353,6 +357,7 @@ export default function HUD({
                   type="file"
                   accept="image/*"
                   aria-label="Infer image depth on this device"
+                  disabled={analysisStatus==='loading'}
                   onChange={(e) => onEdgeAnalyze && onEdgeAnalyze(e.target.files?.[0])}
                 />
                 <span className="hud-upload-label">
@@ -475,7 +480,7 @@ export default function HUD({
                     key={kind}
                     data-report-kind={kind}
                     className="hud-action-btn secondary"
-                    disabled={reportBusy || !analysis.jobId || !metric}
+                    disabled={reportBusy || !analysis.jobId || !measuredMetric}
                     onClick={() => { onGenerateReport(kind); }}
                   >
                     {reportBusy ? 'GENERATING…' : label}
@@ -562,6 +567,7 @@ export default function HUD({
         onSelect={onSelectObject} onPlacement={onPlacement} onMove={onObjectMove} onRotate={onObjectRotate} onConstraint={onObjectConstraint}
         clockState={clockState} onClock={onClock} error={scenarioError} busy={scenarioBusy} close={close}
         roverRoute={roverRoute} roverTelemetry={roverTelemetry} roverSettings={roverSettings} onRoverSettings={onRoverSettings}
+        routeChoices={routeChoices} onRouteChoice={onRouteChoice} onImageScale={onImageScale}
         roverView={roverView} onRoverView={onRoverView} onPlanRoute={onPlanRoute} onDemoScenario={onDemoScenario} onOpenDatasets={()=>{close();setLeftOpen(true);}}/>}
     </div>
   );

@@ -13,7 +13,6 @@ import { inspectTerrainPoint, deriveBody, sampleHeight } from './engine/terrain'
 import {
   analyzeSample,
   analyzeUpload,
-  analyzeEdgeDepth,
   acquireLocationTerrain,
   fetchSampleCatalog,
   fetchMoonTextures,
@@ -25,7 +24,8 @@ import { DEFAULT_ORBIT_MOTION } from './engine/orbitMotion';
 import { lunarLocalFrame, createLocalFrame, datasetCoordinateContext } from './engine/coordinates';
 import { selectedLocation as createSelectedLocation, previousOrbitLevel } from './engine/orbit';
 import { SimulationClock, terrainAttachment, createScenarioObject } from './engine/scenario';
-import { DEFAULT_ROVER, prepareRoverRoute, roverPose, relayVisibility,findRehearsalPlacement } from './engine/rover';
+import { DEFAULT_ROVER, prepareRoverRoutes, roverPose, relayVisibility,findRehearsalPlacement } from './engine/rover';
+import { applyImageScale, depthRehearsalAnalysis, hasRehearsalScale } from './engine/imageRehearsal';
 import { engineeringRange } from './engine/engineeringRange';
 import { updateRehearsal, lunarMissionOrigin, rehearsalObjectPositions } from './engine/rehearsal';
 const EMPTY_OBJECTS = [];
@@ -80,6 +80,7 @@ export default function App() {
   const [environment, setEnvironment] = useState({ sunAzimuth: 135, sunElevation: 38, water: false, waterLevel: 0, snow: false, snowLine: 4000, rocks: false, rockDensity: 300 });
   const [roverSettings, setRoverSettings] = useState({...DEFAULT_ROVER, profileId:'perseverance', speed:.02});
   const [roverRoute, setRoverRoute] = useState(null), [roverView, setRoverView] = useState('orbit');
+  const [routeChoices,setRouteChoices]=useState([]);
   const roverRuntime = useRef({position:[0,0,0],progress:0,complete:false,remaining:0,distance:0,relay:'No relay'});
   const [roverTelemetry,setRoverTelemetry] = useState(null);
   const [captureNotice,setCaptureNotice]=useState('');
@@ -100,7 +101,7 @@ export default function App() {
   }, [clock]);
 
   const pointAbort = useRef(null);
-  useEffect(()=> {clock.reset();setRoverRoute(null);setRoverView('orbit');setRoverTelemetry(null);routeAbort.current?.abort();},[analysis,scenarioObjects,roverSettings.profileId,roverSettings.maxSlope,roverSettings.maxHazard,roverSettings.objectiveId,environment.features,environment.water,environment.waterLevel,clock]);
+  useEffect(()=> {clock.reset();setRoverRoute(null);setRouteChoices([]);setRoverView('orbit');setRoverTelemetry(null);routeAbort.current?.abort();},[analysis,scenarioObjects,roverSettings.profileId,roverSettings.maxSlope,roverSettings.maxHazard,roverSettings.objectiveId,environment.features,environment.water,environment.waterLevel,clock]);
   const liveRoverSpeed=useRef(roverSettings.speed);liveRoverSpeed.current=roverSettings.speed;
   useEffect(()=> {
     if(!roverRoute || !analysis?.terrain)return;
@@ -119,12 +120,19 @@ export default function App() {
     const objective=scenarioObjects.find(o=>o.id===roverSettings.objectiveId&&['OBJECTIVE','SCIENCE SITE'].includes(o.type))||scenarioObjects.find(o=>o.type==='OBJECTIVE')||scenarioObjects.find(o=>o.type==='SCIENCE SITE');
     if(!vehicle||!objective) {setScenarioError('Place a vehicle and an objective first, or use Create rover rehearsal.');return;}
     routeAbort.current?.abort();const controller=new AbortController();routeAbort.current=controller;
-    setScenarioBusy(true);setScenarioError('');clock.reset();setRoverView('orbit');
-    try {const route=await prepareRoverRoute(analysis,vehicle,objective,roverSettings,scenarioObjects,environment,controller.signal);
-      if(!controller.signal.aborted) {roverRuntime.current={...roverPose(route,0),relay:relayVisibility(analysis.terrain,vehicle.position,scenarioObjects)};setRoverRoute(route);setSelectedObjectId(vehicle.id);}}
+    setScenarioBusy(true);setScenarioError('');setRouteChoices([]);setRoverRoute(null);clock.reset();setRoverView('orbit');
+    try {const choices=await prepareRoverRoutes(analysis,vehicle,objective,roverSettings,scenarioObjects,environment,controller.signal);
+      if(!controller.signal.aborted) {const route=choices.find(c=>c.route).route;setRouteChoices(choices);
+        roverRuntime.current={...roverPose(route,0),relay:relayVisibility(analysis.terrain,vehicle.position,scenarioObjects)};setRoverRoute(route);setSelectedObjectId(vehicle.id);}}
     catch(error) {if(!controller.signal.aborted)setScenarioError(error.message);}
     finally {if(routeAbort.current===controller) {setScenarioBusy(false);routeAbort.current=null;}}
   },[analysis,scenarioObjects,selectedObjectId,roverSettings,environment,clock]);
+  const handleRouteChoice=useCallback(id=> {
+    const route=routeChoices.find(c=>c.id===id)?.route;if(!route)return;
+    clock.reset();setClockState(clock.snapshot());setRoverRoute(route);
+    roverRuntime.current={...roverPose(route,0),relay:relayVisibility(analysis.terrain,route.path[0],scenarioObjects)};
+    setRoverTelemetry({...roverRuntime.current});
+  },[routeChoices,clock,analysis,scenarioObjects]);
   const handleDemoScenario = useCallback(async()=> {
     if(!analysis?.terrain)return;
     routeAbort.current?.abort();const controller=new AbortController();routeAbort.current=controller;
@@ -194,7 +202,7 @@ export default function App() {
 
   const applyAnalysisResult = useCallback((result) => {
     setEnvironment(previous=>({...previous,features:[],water:false,waterLevel:Math.round((result?.terrain?.elevationOrigin||0)+(result?.terrain?.minH||0)+((result?.terrain?.maxH||0)-(result?.terrain?.minH||0))*.25)}));
-    if (result?.terrain) {result.terrain.body = deriveBody(result.metadata);result.terrain.metric=result.metadata?.provenance?.metric===true;}
+    if (result?.terrain) {result.terrain.body = deriveBody(result.metadata);result.terrain.metric=hasRehearsalScale(result);}
     const provenance = result?.metadata?.provenance;
     if (result?.terrain) result.coordinateFrame = provenance?.body === 'moon' && Number.isFinite(provenance.origin_lat) && Number.isFinite(provenance.origin_lon)
       ? lunarLocalFrame(provenance.origin_lat, provenance.origin_lon)
@@ -216,6 +224,18 @@ export default function App() {
     setViewMode(DEFAULT_VIEW);
     setPhase('workspace');
   }, []);
+  const imageUrl=analysis?.metadata?.ownedColorUrl;
+  const imageUrlCleanup=useRef(new Map());
+  useEffect(()=> {
+    clearTimeout(imageUrlCleanup.current.get(imageUrl));imageUrlCleanup.current.delete(imageUrl);
+    return()=>{if(imageUrl)imageUrlCleanup.current.set(imageUrl,setTimeout(()=> {
+      URL.revokeObjectURL(imageUrl);imageUrlCleanup.current.delete(imageUrl);
+    },0));};
+  },[imageUrl]);
+  const handleImageScale=useCallback(scale=> {
+    try {applyAnalysisResult(applyImageScale(analysis,scale));setAnalysisStatus('ready');}
+    catch(error){setScenarioError(error.message);}
+  },[analysis,applyAnalysisResult]);
 
   const cancelAcquisition = useCallback(() => {
     ++analysisRequest.current;
@@ -350,7 +370,7 @@ export default function App() {
       const result = await analyzeUpload(file,orthophoto);
       if (request !== analysisRequest.current) return;
       setBackendMode('online');
-      applyAnalysisResult(result);
+      applyAnalysisResult(result.metadata?.provenance?.metric===false?applyImageScale(result):result);
       setAnalysisStatus('ready');
     } catch (error) {
       if (request !== analysisRequest.current) return;
@@ -371,19 +391,12 @@ export default function App() {
     setPhase('workspace');
     try {
       const { estimateDepth } = await import('./lib/edgeDepth');
-      const depth = await estimateDepth(file, { gridSize: 192 });
+      const depth = await estimateDepth(file, { gridSize: 385 });
       if (request !== analysisRequest.current) return;
       setEdgeInfo({ status: 'ready', device: depth.device, ms: depth.ms, model: depth.model });
-      const result = await analyzeEdgeDepth(depth.grid, {
-        name: file.name ? `Edge AI · ${file.name}` : 'Edge-AI Depth Field',
-        device: depth.device,
-        model: depth.model,
-        infer_ms: depth.ms,
-        source_width: depth.sourceWidth,
-        source_height: depth.sourceHeight,
-      },file);
+      const result = depthRehearsalAnalysis(depth,{name:file.name||'Image rehearsal',
+        jobId:crypto.randomUUID(),colorUrl:URL.createObjectURL(file)});
       if (request !== analysisRequest.current) return;
-      setBackendMode('online');
       applyAnalysisResult(result);
       setAnalysisStatus('ready');
     } catch (error) {
@@ -582,7 +595,7 @@ export default function App() {
           performanceOpen={performanceOpen} onStats={handleStats} benchmarkMode={benchmarkMode}
           onTerrainReady={handleTerrainReady} onTerrainError={handleTerrainError}
           qualityTier={qualityTier} verticalExaggeration={verticalExaggeration} ambience={ambience} clock={clock}
-          simulationPlaying={clockState.playing} environment={environment} roverRoute={roverRoute} roverRuntime={roverRuntime} roverProfileId={roverSettings.profileId} roverView={roverView} onRoverView={setRoverView}
+          simulationPlaying={clockState.playing} environment={environment} roverRoute={roverRoute} routeChoices={routeChoices} roverRuntime={roverRuntime} roverProfileId={roverSettings.profileId} roverView={roverView} onRoverView={setRoverView}
           keepMetricZoom={keepMetricZoom} onMetricZoom={setKeepMetricZoom} cameraMemory={terrainCameraMemory}
           scenarioObjects={scenarioObjects} selectedObjectId={selectedObjectId} placement={placement}
           onPlaceObject={handlePlaceObject} onSelectObject={setSelectedObjectId} onMoveObject={handleObjectMove}
@@ -605,7 +618,7 @@ export default function App() {
         reportBusy={reportBusy}
         onViewModeChange={setViewMode}
         onEngineeringRange={width=>{cancelAcquisition();applyAnalysisResult(engineeringRange(width));setAnalysisStatus('ready');}} onAnalyzeSample={handleAnalyzeSample}
-        onUpload={handleUpload}
+        onUpload={(file,orthophoto)=>file&&!orthophoto&&!/\.(tif|tiff|geotiff)$/i.test(file.name)?handleEdgeAnalyze(file):handleUpload(file,orthophoto)}
         onEdgeAnalyze={handleEdgeAnalyze}
         edgeInfo={edgeInfo}
         diagnostics={diagnostics}
@@ -622,6 +635,7 @@ export default function App() {
         ambience={ambience} onAmbienceChange={setAmbience}
         environment={environment} onEnvironmentChange={setEnvironment}
         roverRoute={roverRoute} roverTelemetry={roverTelemetry} roverSettings={roverSettings} onRoverSettings={setRoverSettings}
+        routeChoices={routeChoices} onRouteChoice={handleRouteChoice} onImageScale={handleImageScale}
         roverView={roverView} onRoverView={setRoverView} onPlanRoute={handlePlanRoute} onDemoScenario={handleDemoScenario}
         wideArea={wideArea} onWideArea={setWideArea} regionSizeKm={regionSizeKm} onRegionSizeChange={setRegionSizeKm} onAcquireSite={handleGlobeSiteSelected}
         clockState={clockState} onClock={handleClock}

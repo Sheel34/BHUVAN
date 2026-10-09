@@ -33,6 +33,10 @@ export async function getDepther(onProgress) {
       device: _device,
       dtype: _device === 'webgpu' ? 'fp16' : 'q8',
       progress_callback: onProgress,
+    }).catch(async error=> {
+      if(_device!=='webgpu')throw error;
+      _device='wasm';
+      return pipeline('depth-estimation',MODEL_ID,{device:'wasm',dtype:'q8',progress_callback:onProgress});
     }).then((p) => {
       _depther = p;
       return p;
@@ -50,7 +54,7 @@ export async function getDepther(onProgress) {
  */
 export async function estimateDepth(imageSource, { onProgress, gridSize = 192 } = {}) {
   const depther = await getDepther(onProgress);
-
+  try {
   let src = imageSource;
   if (typeof File !== 'undefined' && imageSource instanceof File) {
     src = URL.createObjectURL(imageSource);
@@ -93,16 +97,21 @@ export async function estimateDepth(imageSource, { onProgress, gridSize = 192 } 
     device: _device,
     model: MODEL_ID,
   };
+  } finally {
+    await depther.dispose();_depther=null;_loading=null;
+  }
 }
 
 function resampleToGrid(data, w, h, n, mn, range) {
   const out = [];
   for (let gy = 0; gy < n; gy++) {
     const row = [];
-    const sy = Math.min(h - 1, Math.floor((gy / n) * h));
+    const fy=gy/(n-1)*(h-1),sy=Math.floor(fy),dy=fy-sy;
     for (let gx = 0; gx < n; gx++) {
-      const sx = Math.min(w - 1, Math.floor((gx / n) * w));
-      const v = data[sy * w + sx];
+      const fx=gx/(n-1)*(w-1),sx=Math.floor(fx),dx=fx-sx;
+      const x1=Math.min(w-1,sx+1),y1=Math.min(h-1,sy+1);
+      const v=(data[sy*w+sx]*(1-dx)+data[sy*w+x1]*dx)*(1-dy)
+        +(data[y1*w+sx]*(1-dx)+data[y1*w+x1]*dx)*dy;
       // invert (near→low): higher terrain = farther-from-camera not assumed;
       // keep raw normalised value, the pipeline only needs relative relief.
       row.push((v - mn) / range);

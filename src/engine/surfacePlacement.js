@@ -8,6 +8,13 @@ export function triangleHeight(h00, h10, h01, h11, x, z) {
 
 export const ROVER_WHEELS = Object.freeze([-1,1].flatMap(x=>[-.85,0,.85].map(z=>Object.freeze([x,z]))));
 
+export function memoryTriangleHeight(terrain,x,z) {
+  if(!terrain.data||Math.max(Math.abs(x),Math.abs(z))>terrain.scale/2)return NaN;
+  const fi=(x/terrain.scale+.5)*(terrain.size-1),fj=(z/terrain.scale+.5)*(terrain.size-1);
+  const i=Math.min(terrain.size-2,Math.floor(fi)),j=Math.min(terrain.size-2,Math.floor(fj)),n=terrain.size;
+  return triangleHeight(terrain.data[i*n+j],terrain.data[(i+1)*n+j],terrain.data[i*n+j+1],terrain.data[(i+1)*n+j+1],fi-i,fj-j);
+}
+
 export function roverGroundSupport(position, heading, heightAt, wheels=ROVER_WHEELS) {
   const c=Math.cos(heading),s=Math.sin(heading);
   const contacts=wheels.map(([x,z])=> {

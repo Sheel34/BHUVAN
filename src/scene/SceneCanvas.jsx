@@ -15,6 +15,7 @@ import EnvironmentalFeatures from './EnvironmentalFeatures';
 import RoverRehearsal from './RoverRehearsal';
 import { ENVIRONMENT_PROFILES } from '../engine/environment';
 import { useMobileQuality, WebGLContextStatus, QUALITY_PROFILES, resolveQuality, FrameBudget } from './rendering';
+const NO_ROUTES=Object.freeze([]);
 
 
 // Neutral walls exist only at the dataset perimeter; no interior tile skirts
@@ -53,8 +54,8 @@ function DatasetBase({ terrain }) {
   );
 }
 
-function Lighting({ terrain, quality, verticalExaggeration, environment,roverView,roverRoute,roverRuntime }) {
-  const light=useRef();const following=Boolean(roverRoute&&roverView!=='orbit');
+function Lighting({ terrain, quality, verticalExaggeration, environment,roverView,roverRoute,roverRuntime,inspectionRover }) {
+  const light=useRef();const following=Boolean((roverRoute&&roverView!=='orbit')||inspectionRover);
   const s = terrain.scale;
   const center = (terrain.minH + terrain.maxH) / 2 * verticalExaggeration;
   const profile = ENVIRONMENT_PROFILES[terrain.body] || ENVIRONMENT_PROFILES.moon;
@@ -65,7 +66,7 @@ function Lighting({ terrain, quality, verticalExaggeration, environment,roverVie
   useEffect(()=>{if(light.current){light.current.shadow.camera.updateProjectionMatrix();light.current.shadow.needsUpdate=true;}},[halfShadow,sunDistance,relief,quality.shadowMap]);
   useFrame(()=> {
     if(!light.current)return;
-    const p=following?roverRuntime.current:null;
+    const p=following?(roverRoute?roverRuntime.current:inspectionRover):null;
     const x=p?.position[0]??0,y=p?(p.support?.centerHeight??p.position[1])*verticalExaggeration:center,z=p?.position[2]??0;
     light.current.position.set(x+Math.sin(azimuth)*Math.cos(elevation)*sunDistance,y+Math.sin(elevation)*sunDistance,z+Math.cos(azimuth)*Math.cos(elevation)*sunDistance);
     light.current.target.position.set(x,y,z);light.current.target.updateMatrixWorld();
@@ -96,7 +97,7 @@ export default function SceneCanvas({
   onTerrainError,
   benchmarkMode='tiled', qualityTier, verticalExaggeration = 1, ambience = false, clock,
   scenarioObjects = [], selectedObjectId, placement, onPlaceObject, onSelectObject, onMoveObject, scenarioError, scenarioBusy,
-  environment={}, roverRoute, roverRuntime, roverProfileId, roverView='orbit', onRoverView,
+  environment={}, roverRoute,routeChoices=NO_ROUTES, roverRuntime, roverProfileId, roverView='orbit', onRoverView,
   keepMetricZoom,onMetricZoom,cameraMemory,simulationPlaying=false,
 }) {
   const terrain = analysis?.terrain;
@@ -175,6 +176,7 @@ export default function SceneCanvas({
   const hitPoint = e => ({ x: e.point.x, y: e.point.y / verticalExaggeration, z: e.point.z });
   const handleSelect = useCallback(e => {
     const start = down.current; down.current = null;
+    if(armMode)return;
     if (!start || Math.hypot(e.nativeEvent.clientX - start[0], e.nativeEvent.clientY - start[1]) > 7 || !e.object.geometry?.userData.tileId) return;
     e.stopPropagation(); const point = hitPoint(e);
     cursorHit.current = point;
@@ -185,7 +187,7 @@ export default function SceneCanvas({
     onFocusPoint?.({ ...point, mode: double ? 'focus' : 'pivot' });
     onInspectPoint?.(point.x, point.z);
     lastClick.current = double ? null : { time: now, x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
-  }, [onFocusPoint, onInspectPoint, verticalExaggeration, placement, onPlaceObject]);
+  }, [onFocusPoint, onInspectPoint, verticalExaggeration, placement, onPlaceObject,armMode]);
   const handleDoubleClick = useCallback(e => {
     if (placement || !e.object.geometry?.userData.tileId) return;
     e.stopPropagation(); onFocusPoint?.({ ...hitPoint(e), mode: 'focus' });
@@ -232,7 +234,7 @@ export default function SceneCanvas({
 
         {terrain && !invalid && (
           <>
-            <Lighting roverView={roverView} roverRoute={roverRoute} roverRuntime={roverRuntime} terrain={terrain} quality={quality} verticalExaggeration={verticalExaggeration} environment={environment}/>
+            <Lighting roverView={roverView} roverRoute={roverRoute} roverRuntime={roverRuntime} inspectionRover={armMode?scenarioObjects.find(o=>o.id===(roverRoute?.vehicleId||selectedObjectId)&&o.type==='VEHICLE')||scenarioObjects.find(o=>o.type==='VEHICLE'):null} terrain={terrain} quality={quality} verticalExaggeration={verticalExaggeration} environment={environment}/>
             <LocalEnvironment terrain={terrain} quality={quality} ambience={ambience} clock={clock} verticalExaggeration={verticalExaggeration} />
 
             <group scale={[1, verticalExaggeration, 1]}>
@@ -244,7 +246,7 @@ export default function SceneCanvas({
             </group>
             <EnvironmentalFeatures terrain={terrain} environment={environment}/>
             </group>
-            <RoverRehearsal route={roverRoute} runtime={roverRuntime} clock={clock} terrain={terrain} objects={scenarioObjects} verticalExaggeration={verticalExaggeration}/>
+            <RoverRehearsal route={roverRoute} alternatives={roverView==='orbit'?routeChoices:NO_ROUTES} terrain={terrain} verticalExaggeration={verticalExaggeration}/>
             <AnnotationProjection points={interestRegions} terrain={terrain} enabled={showAnnotations && !placement}
               verticalExaggeration={verticalExaggeration} registry={annotationRegistry} />
             <ScenarioObjects roverProfileId={roverProfileId} terrain={terrain} objects={scenarioObjects} selectedId={selectedObjectId}
@@ -267,7 +269,14 @@ export default function SceneCanvas({
       {terrain && viewMode === 'surface' && imagery.status === 'error'
         && <div className="scene-texture-note" role="status">Surface imagery unavailable; showing shaded DEM.</div>}
       {terrain && <div className="terrain-view-controls">
-        {roverRoute&&roverProfileId==='perseverance'&&<button className="terrain-focus-control" aria-pressed={armMode} disabled={simulationPlaying||roverView==='rover'} onClick={()=>setArmMode(v=>!v)} title="Pause, enable Arm inspect, then move the cursor over the scene. Visual joint motion; not collision or actuator validation.">{armMode?'ARM · TRACKING':'ARM INSPECT'}</button>}
+        {scenarioObjects.some(o=>o.type==='VEHICLE')&&roverProfileId==='perseverance'&&<button className="terrain-focus-control" aria-pressed={armMode} disabled={simulationPlaying||roverView==='rover'} onClick={()=> {
+          if(!armMode&&roverView==='orbit') {
+            const rover=scenarioObjects.find(o=>o.id===(roverRoute?.vehicleId||selectedObjectId)&&o.type==='VEHICLE')||scenarioObjects.find(o=>o.type==='VEHICLE');
+            const position=roverRoute?roverRuntime.current.position:rover.position;
+            onFocusPoint?.({x:position[0],y:position[1]+1,z:position[2],mode:'object'});
+          }
+          setArmMode(v=>!v);
+        }} title="Pause and move the cursor over the scene to pose the original Perseverance arm.">{armMode?'ARM · TRACKING':'ARM INSPECT'}</button>}
         {roverRoute&&<button className="terrain-focus-control" onClick={()=>window.dispatchEvent(new CustomEvent('bhuvan-capture-frame',{detail:'terrain'}))} title="Save this simulated view with camera and DEM metadata; a colour frame alone cannot reconstruct exact terrain.">CAPTURE VIEW</button>}
         {roverView==='orbit' && <button data-liquid-control="metric-zoom" className="terrain-focus-control" aria-pressed={keepMetricZoom} onClick={()=>onMetricZoom(!keepMetricZoom)} title="Retain camera range across measured patches on the same body. Frame All still fits the entire patch.">METRIC ZOOM · {keepMetricZoom?'ON':'OFF'}</button>}
         {roverRoute && <div className="rover-view-switch" role="group" aria-label="Active rover viewpoint">{['orbit','chase','rover'].map(view=><button key={view} data-liquid-control={`camera-${view}`} className="terrain-focus-control" aria-pressed={roverView===view} onClick={()=>onRoverView?.(view)}>{view==='rover'?'ROVER POV':view.toUpperCase()}</button>)}</div>}

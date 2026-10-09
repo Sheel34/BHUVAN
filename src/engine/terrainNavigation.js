@@ -20,7 +20,7 @@ export function terrainFrameDistance(terrain, fovDegrees, aspect, verticalExagge
 export function terrainDisplayMetadata(analysis, verticalExaggeration = 1) {
   const t = analysis?.terrain, p = analysis?.metadata?.provenance;
   if (!t) return null;
-  return { physicalExtent: [t.scale, t.scale], metric: p?.metric === true,
+  return { physicalExtent: [t.scale, t.scale], metric: p?.metric === true || analysis.metadata?.rehearsalScale?.kind==='assumed',
     sourceShape: p?.source_shape || null, sourceGsd: p?.source_gsd ?? null,
     analysisGrid: [t.size, t.size], analysisGsd: p?.analysis_gsd ?? null,
     verticalExaggeration, elevationOrigin: t.elevationOrigin || 0,

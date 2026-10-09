@@ -570,3 +570,8 @@
  .liquid-ui:has(.rover-view-switch) .liquid-workspace-caption {display:none;}
  .liquid-ui:not(.rover-view):has(.rover-view-switch) .dataset-fidelity {top:185px;}
 }
+.liquid-ui .route-choices {display:grid;gap:12px;margin:16px 0;}
+.liquid-ui .route-choice {width:100%;text-align:left;white-space:normal;min-height:76px;}
+.liquid-ui .route-choice[aria-pressed="true"] {border-color:rgba(224,237,243,.7);}
+.liquid-ui .image-rehearsal-scale summary {cursor:pointer;margin-bottom:14px;}
+.liquid-ui .image-rehearsal-scale form {display:grid;gap:12px;}

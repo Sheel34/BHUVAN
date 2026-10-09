@@ -1,5 +1,6 @@
 import AssetModel from './AssetModel';
-import { vehicleProfile } from '../engine/vehicleProfiles';
+import { vehicleProfile,vehicleWheels } from '../engine/vehicleProfiles';
+import { roverGroundSupport,memoryTriangleHeight } from '../engine/surfacePlacement';
 import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
@@ -76,10 +77,16 @@ export default function ScenarioObjects({ terrain, objects, selectedId, vertical
   };
   const size = 1;
   const profile=vehicleProfile(roverProfileId==='curiosity'?'curiosity':'perseverance');
+  const placedSupports=useMemo(()=>new Map(objects.filter(o=>o.type==='VEHICLE').map(object=> {
+    let support=null;
+    if(!terrain.stream)try {support=roverGroundSupport(object.position,object.orientation[1],
+      (x,z)=>memoryTriangleHeight(terrain,x,z),vehicleWheels(profile.id));} catch { /* Edge placement awaits native support. */ }
+    return [object.id,support];
+  })),[objects,terrain,profile.id]);
   if(terrain.metric===false)return null;
   return <group name="User-created scenario objects">
-    {objects.map(object => <group key={object.id} visible={!(roverView==='rover'&&object.id===roverRoute?.vehicleId)} ref={object.id===roverRoute?.vehicleId ? rover : undefined} position={[object.position[0], object.position[1] * verticalExaggeration, object.position[2]]}
-      rotation={[0, object.orientation[1], 0]} scale={size}
+    {objects.map(object => <group key={object.id} visible={!(roverView==='rover'&&object.id===roverRoute?.vehicleId)} ref={object.id===roverRoute?.vehicleId ? rover : undefined} position={[object.position[0], (placedSupports.get(object.id)?.centerHeight??object.position[1]) * verticalExaggeration, object.position[2]]}
+      rotation={[-Math.atan(Math.tan(placedSupports.get(object.id)?.pitch||0)*verticalExaggeration), object.orientation[1], Math.atan(Math.tan(placedSupports.get(object.id)?.roll||0)*verticalExaggeration)]} rotation-order="YXZ" scale={size}
       onPointerDown={e => {
         if (e.nativeEvent.button !== 0 || object.id===roverRoute?.vehicleId) return;
         e.stopPropagation(); onSelect(object.id); onDragging(true);
@@ -96,7 +103,7 @@ export default function ScenarioObjects({ terrain, objects, selectedId, vertical
         if (hit) { d.hit = hit.point.clone(); if (d.moved) d.group.position.copy(hit.point); }
       }}
       onPointerUp={finish} onPointerCancel={e => finish(e, true)}>
-      {object.type==='VEHICLE' ? <AssetModel url={profile.asset} width={profile.width} wheelRig={profile.id} armMode={armMode&&object.id===roverRoute?.vehicleId} travelRuntime={object.id===roverRoute?.vehicleId?roverRuntime:null}/> : ['OBJECTIVE','SCIENCE SITE'].includes(object.type)?<Waypoint object={object} route={roverRoute} runtime={roverRuntime} labelText={scenarioLabel(objects,object)}/> : ['FACILITY','STATION'].includes(object.type)?<FacilityModel/> : <mesh position={[0, object.type==='RELAY'?3:1, 0]} castShadow>
+      {object.type==='VEHICLE' ? <AssetModel url={profile.asset} width={profile.width} wheelRig={profile.id} armMode={armMode&&object.id===(roverRoute?.vehicleId||objects.find(o=>o.id===selectedId&&o.type==='VEHICLE')?.id||objects.find(o=>o.type==='VEHICLE')?.id)} travelRuntime={object.id===roverRoute?.vehicleId?roverRuntime:null}/> : ['OBJECTIVE','SCIENCE SITE'].includes(object.type)?<Waypoint object={object} route={roverRoute} runtime={roverRuntime} labelText={scenarioLabel(objects,object)}/> : ['FACILITY','STATION'].includes(object.type)?<FacilityModel/> : <mesh position={[0, object.type==='RELAY'?3:1, 0]} castShadow>
         {object.type === 'FACILITY' || object.type==='STATION' ? <boxGeometry args={[8, 2, 5]} /> : object.type==='RELAY' ? <cylinderGeometry args={[.1,.2,6,8]}/> : <cylinderGeometry args={[.3,.4,2,12]} />}
         <meshStandardMaterial color={selectedId === object.id ? '#c9f8ff' : '#79b3cf'} metalness={.35} roughness={.3} />
       </mesh>}

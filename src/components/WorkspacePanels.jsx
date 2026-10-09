@@ -5,6 +5,7 @@ import { ENVIRONMENT_PROFILES, environmentLayers, parseEnvironmentFeatures, atta
 import { QUALITY_PROFILES, resolveQuality } from '../scene/rendering';
 import { useLiquidPreferences } from './LiquidPreferences';
 import { traverseCSV } from '../engine/rover';
+import { hasRehearsalScale } from '../engine/imageRehearsal';
 import { boundedRoverSpeed, scenarioLabel, SCENARIO_ROLES, observationsCSV } from '../engine/rehearsal';
 
 export function EnvironmentPanel({ analysis, mobile, qualityTier, onQualityChange, verticalExaggeration,
@@ -93,17 +94,33 @@ function RoverSpeed({speed,nominal,onChange}) {
   </div>;
 }
 
+function ImageScale({analysis,onApply}) {
+  const scale=analysis.metadata.rehearsalScale;
+  return <details className="image-rehearsal-scale" open><summary>Image dimensions · assumed</summary>
+    <form key={analysis.jobId} onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);
+      onApply({width:Number(form.get('width')),relief:Number(form.get('relief')),invert:form.get('invert')==='on'});}}>
+      <label className="workspace-field">WIDTH · m<input name="width" aria-label="Image terrain width" type="number" min="20" max="30000" step="any" defaultValue={scale.width} required/></label>
+      <label className="workspace-field">RELIEF · m<input name="relief" aria-label="Image terrain relief" type="number" min="0" max={scale.width*.5} step="any" defaultValue={scale.relief} required/></label>
+      <label className="workspace-check"><input name="invert" aria-label="Invert image relief" type="checkbox" defaultChecked={scale.invert}/>Invert relief</label>
+      <button className="hud-action-btn">APPLY DIMENSIONS</button>
+    </form><p className="assumption">Estimated surface. Changing dimensions resets placement. Hidden holes remain unknown.</p>
+  </details>;
+}
+
 export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlacement, onMove, onRotate, onConstraint,
-  clockState, onClock, error, busy, close, roverRoute, roverTelemetry, roverSettings, onRoverSettings, roverView, onRoverView, onPlanRoute, onDemoScenario,onOpenDatasets }) {
+  clockState, onClock, error, busy, close, roverRoute, roverTelemetry, roverSettings, onRoverSettings, roverView, onRoverView, onPlanRoute, onDemoScenario,onOpenDatasets,
+  routeChoices=[],onRouteChoice,onImageScale }) {
   const profile=vehicleProfile(roverSettings.profileId==='generic'?'perseverance':roverSettings.profileId);
   const selected = objects.find(o => o.id === selectedId);
   const unit = 'm';
-  if(!analysis?.metadata?.provenance?.metric)return <div id="scenario-panel" className="hud-right-panel" data-liquid-surface="panel"><div className="hud-panel-header">SCENARIO<button onClick={close} aria-label="Close scenario">×</button></div><div className="hud-section"><h3>Choose terrain with a known scale</h3><p className="assumption">Rover motion needs elevation in metres.</p><button className="hud-action-btn" onClick={onOpenDatasets}>CHOOSE METRIC TERRAIN</button><p className="assumption">Measured DEM or offline test range.</p></div></div>;
+  if(!hasRehearsalScale(analysis))return <div id="scenario-panel" className="hud-right-panel" data-liquid-surface="panel"><div className="hud-panel-header">SCENARIO<button onClick={close} aria-label="Close scenario">×</button></div><div className="hud-section"><h3>Choose a surface</h3><p className="assumption">Upload a terrain image or load a DEM.</p><button className="hud-action-btn" onClick={onOpenDatasets}>CHOOSE TERRAIN</button></div></div>;
   return <div id="scenario-panel" className="hud-right-panel" data-liquid-surface="panel">
     <div className="hud-panel-header">SCENARIO <button onClick={close} aria-label="Close scenario">×</button></div>
+    {analysis.metadata?.rehearsalScale&&<div className="hud-section"><ImageScale analysis={analysis} onApply={onImageScale}/></div>}
     <div className="hud-section"><label className="workspace-field">MISSION VEHICLE<select aria-label="Mission vehicle" value={profile.id} onChange={e=>onRoverSettings(p=>({...p,profileId:e.target.value,speed:vehicleProfile(e.target.value).speed}))}>{Object.values(VEHICLE_PROFILES).filter(p=>p.asset).map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
       <p>{profile.science}</p><p className="assumption">{profile.task}. Mars vehicle; this rehearsal is hypothetical.</p>
       <p className="assumption">Track {profile.track} m · wheelbase {profile.wheelbase} m (approximate).</p>
+      <p className="assumption">{profile.id==='perseverance'?'Pause → Arm inspect → move cursor over the rover.':'Curiosity is a static supplied model. Select Perseverance for cursor arm inspection.'}</p>
     </div>
     <div className="hud-section"><div className="hud-section-label">CLOCK · {clockState.elapsed.toFixed(1)} s</div>
       <div className="glass-segments"><button disabled={!roverRoute||roverTelemetry?.complete} aria-pressed={clockState.playing} onClick={() => onClock(clockState.playing ? 'pause' : 'play')}>{clockState.playing ? 'PAUSE' : 'PLAY'}</button>
@@ -113,9 +130,8 @@ export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlace
       <p className="assumption">Plan → Play. Reset returns to the start.</p>
     </div>
     <div className="hud-section"><div className="hud-section-label">ROVER → OBJECTIVE</div>
-      <button className="hud-action-btn" disabled={!analysis?.metadata?.provenance?.metric||busy} onClick={onDemoScenario}>CREATE ROVER REHEARSAL</button>
-      {analysis && !analysis.metadata?.provenance?.metric && <p className="assumption">Load a metric DEM to rehearse the metre-sized rover. An uncalibrated photograph cannot establish wheel spacing, travel speed or physical ground clearance.</p>}
-      <p className="assumption">Place a rover and objective → Plan Route. DEM hazards are mapped automatically.</p>
+      <button className="hud-action-btn" disabled={busy} onClick={onDemoScenario}>CREATE ROVER REHEARSAL</button>
+      <p className="assumption">Place rover + objective → compare routes. Hazards come from the surface.</p>
       <label className="workspace-field">DESTINATION<select aria-label="Rover destination" value={roverSettings.objectiveId||objects.find(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type))?.id||''} onChange={e=>onRoverSettings(previous=>({...previous,objectiveId:e.target.value}))}>
         {!objects.some(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type)) && <option value="">Place an objective first</option>}
         {objects.filter(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type)).map(o=><option key={o.id} value={o.id}>{scenarioLabel(objects,o)}</option>)}
@@ -124,12 +140,15 @@ export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlace
       <label className="workspace-field">MAXIMUM GRADE · {roverSettings.maxSlope}°<input aria-label="Rover maximum grade" type="range" min="5" max="45" value={roverSettings.maxSlope} onChange={e=>onRoverSettings(previous=>({...previous,maxSlope:Number(e.target.value)}))}/></label>
       <label className="workspace-field">MAXIMUM HAZARD INDEX · {roverSettings.maxHazard.toFixed(2)}<input aria-label="Rover maximum hazard" type="range" min=".1" max="1" step=".05" value={roverSettings.maxHazard} onChange={e=>onRoverSettings(previous=>({...previous,maxHazard:Number(e.target.value)}))}/></label>
       <p className="assumption">Routes must stay below {roverSettings.maxSlope}° and hazard {roverSettings.maxHazard.toFixed(2)}. Change a limit → replan.</p>
-      <button className="hud-action-btn" disabled={!analysis||busy||!objects.some(o=>o.type==='VEHICLE')||!objects.some(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type))} onClick={onPlanRoute}>{busy?'READING ROUTE CORRIDOR…':'PLAN ROUTE'}</button>
+      <button className="hud-action-btn" disabled={!analysis||busy||!objects.some(o=>o.type==='VEHICLE')||!objects.some(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type))} onClick={onPlanRoute}>{busy?'CHECKING THREE ROUTES…':'COMPARE 3 ROUTES'}</button>
+      {routeChoices.length>0&&<div className="route-choices" role="group" aria-label="Terrain route alternatives">{routeChoices.map(choice=><button key={choice.id} className="hud-dataset-btn route-choice" disabled={!choice.route} aria-pressed={Boolean(choice.route&&choice.route===roverRoute)} onClick={()=>onRouteChoice(choice.id)}>
+        <span className="hud-dataset-name">{choice.label}</span><span className="hud-dataset-sub">{choice.route?`${choice.route.distance.toFixed(1)} m · ${choice.route.maxSlope.toFixed(1)}° peak · hazard ${choice.route.maxHazard.toFixed(2)}`:choice.reason}</span>
+      </button>)}</div>}
       {error && <p role="alert" className="hud-status-message error">{error}</p>}
       {roverRoute && <>
         <p className="assumption">Six wheel supports · peak roll {(roverRoute.maxRoll??0).toFixed(1)}° · contact gap {(roverRoute.maxUnsupportedHeight??0).toFixed(2)} m.</p>
-        <p className="route-coordinate-readout">Rover X {roverTelemetry?.position?.[0]?.toFixed(2)} · Z {roverTelemetry?.position?.[2]?.toFixed(2)} · DEM elevation {((roverTelemetry?.position?.[1]||0)+(analysis.terrain.elevationOrigin||0)).toFixed(2)} {unit}</p>
-        <button className="hud-action-btn" disabled={!analysis.metadata?.provenance?.metric} onClick={()=> {const url=URL.createObjectURL(new Blob([traverseCSV(roverRoute,analysis.terrain.elevationOrigin||0)],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download='bhuvan-planned-traverse.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>EXPORT PLANNED TRAVERSE</button>
+        <p className="route-coordinate-readout">Rover X {roverTelemetry?.position?.[0]?.toFixed(2)} · Z {roverTelemetry?.position?.[2]?.toFixed(2)} · {roverRoute.assumedScale?'Assumed height':'DEM elevation'} {((roverTelemetry?.position?.[1]||0)+(analysis.terrain.elevationOrigin||0)).toFixed(2)} {unit}</p>
+        <button className="hud-action-btn" onClick={()=> {const url=URL.createObjectURL(new Blob([traverseCSV({...roverRoute,speed:roverSettings.speed},analysis.terrain.elevationOrigin||0)],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=roverRoute.assumedScale?'bhuvan-assumed-image-traverse.csv':'bhuvan-planned-traverse.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}}>EXPORT PLANNED TRAVERSE</button>
         <p className="route-summary">{roverRoute.distance.toFixed(1)} {unit} · {roverRoute.maxSlope.toFixed(1)}° maximum grade · hazard {roverRoute.maxHazard.toFixed(2)}</p>
         <progress aria-label="Rover objective progress" max="1" value={roverTelemetry?.progress||0}/>
         <p role="status">{roverTelemetry?.complete?'OBJECTIVE REACHED · OBSERVATION PLAN READY':`${((roverTelemetry?.progress||0)*100).toFixed(1)}% complete · ${Math.ceil(roverTelemetry?.remaining ?? roverRoute.distance/roverRoute.speed)} s remaining`}</p>
@@ -176,7 +195,7 @@ export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlace
       {['FACILITY','STATION','HAZARD REGION','RELAY'].includes(selected.type)&&<label className="workspace-field">{selected.type==='RELAY'?'RELAY RANGE':'EXCLUSION RADIUS'} · m<input key={`${selected.id}-${selected.constraints?.radius}-${selected.constraints?.range}`} aria-label={selected.type==='RELAY'?'Relay range':'Exclusion radius'} type="number" min="1" max={analysis.terrain.scale*2} step="any" defaultValue={selected.type==='RELAY'?(selected.constraints?.range??analysis.terrain.scale*.5):(selected.constraints?.radius??(selected.type==='HAZARD REGION'?analysis.terrain.scale/(Math.min(129,analysis.terrain.size)-1)*1.5:6))} onBlur={e=>onConstraint?.(selected.id,selected.type==='RELAY'?'range':'radius',Math.max(1,Math.min(analysis.terrain.scale*2,Number(e.target.value)||1)))}/></label>}
       <p className="entity-purpose">{SCENARIO_ROLES[selected.type]}</p>
       {selected.id===roverRoute?.vehicleId&&roverTelemetry&&<p className="route-coordinate-readout">Current X {roverTelemetry.position[0].toFixed(2)} · Z {roverTelemetry.position[2].toFixed(2)} m · heading {(roverTelemetry.heading*180/Math.PI).toFixed(1)}° · {clockState.playing?roverTelemetry.speed?.toFixed(3):'0.000'} m/s</p>}
-      <p className="assumption">Attached DEM elevation: {selected.attachment.elevation.toFixed(2)} m.</p>
+      <p className="assumption">{analysis.metadata?.rehearsalScale?'Assumed surface height':'Attached DEM elevation'}: {selected.attachment.elevation.toFixed(2)} m.</p>
 
     </div>}
   </div>;
