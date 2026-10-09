@@ -21,7 +21,19 @@ export function planGridRoute(terrain, layers, start, goal, settings=DEFAULT_ROV
   const total=count*count, heights=new Float64Array(total), hazards=new Float32Array(total), blocked=new Uint8Array(total);
   for(let i=0;i<count;i++) for(let j=0;j<count;j++) {
     const k=i*count+j,x=i*cell-half,z=j*cell-half;
-    heights[k]=sampleHeight(terrain,x,z);const hazard=sampleRaster(layers?.hazard,terrain,x,z);
+    heights[k]=sampleHeight(terrain,x,z);let hazard=sampleRaster(layers?.hazard,terrain,x,z);
+    // Preserve resolved hazards between the coarser planning nodes. Averaging
+    // or point sampling can erase a small pit before A* ever sees it.
+    if(terrain.size>count&&layers?.hazard?.length===terrain.size**2) {
+      const stride=(terrain.size-1)/(count-1),radius=stride/2;
+      const loX=Math.max(0,Math.floor(i*stride-radius)),hiX=Math.min(terrain.size-1,Math.ceil(i*stride+radius));
+      const loZ=Math.max(0,Math.floor(j*stride-radius)),hiZ=Math.min(terrain.size-1,Math.ceil(j*stride+radius));
+      hazard=0;
+      for(let a=loX;a<=hiX;a++)for(let b=loZ;b<=hiZ;b++) {
+        const value=layers.hazard[a*terrain.size+b];
+        hazard=Math.max(hazard,Number.isFinite(value)?value:1);
+      }
+    }
     hazards[k]=Number.isFinite(hazard)?hazard:1;
     blocked[k]=!Number.isFinite(heights[k]) || !Number.isFinite(hazard) || hazards[k]>(settings.maxHazard ?? .8)
       || (environment.water && terrain.body==='earth' && heights[k]+(terrain.elevationOrigin||0)<environment.waterLevel)
@@ -78,7 +90,8 @@ export async function prepareRoverRoute(analysis, vehicle, objective, settings, 
       const n=overview.rows;
       const values=Float64Array.from({length:n*n},(_,k)=>windowValue(overview,'height',overview.rowIndices[Math.floor(k/n)],overview.columnIndices[k%n]));
       planning={...terrain,tileSource:null,size:n,data:values};
-      layers={hazard:Float32Array.from({length:n*n},(_,k)=>windowValue(overview,'hazard',overview.rowIndices[Math.floor(k/n)],overview.columnIndices[k%n])??NaN)};
+      const hazardField=overview.fields.planning_hazard?'planning_hazard':'hazard';
+      layers={hazard:Float32Array.from({length:n*n},(_,k)=>windowValue(overview,hazardField,overview.rowIndices[Math.floor(k/n)],overview.columnIndices[k%n])??NaN)};
     }
     signal?.throwIfAborted();
     const obstacles=[...objects.filter(o=>o.type==='HAZARD REGION'||o.type==='FACILITY'||o.type==='STATION'),

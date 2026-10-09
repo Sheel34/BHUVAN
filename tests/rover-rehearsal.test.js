@@ -36,6 +36,17 @@ test('A* detours around explicit hazard areas without diagonal corner cutting',(
   assert.ok(route.path.some(p=>Math.abs(p[2])>=4));
 });
 
+test('a DEM hazard between planning nodes causes an automatic detour with only a rover and objective',async()=> {
+  const size=257,heights=new Float64Array(size**2),hazard=new Float32Array(size**2);
+  for(let i=127;i<=129;i++)for(let j=127;j<=129;j++) {heights[i*size+j]=-1;hazard[i*size+j]=1;}
+  const fixture={...analysis,terrain:{...terrain,size,scale:256,minH:-1,data:heights},layers:{hazard}};
+  const start={...vehicle,position:[-20,0,0]},goal={...objective,position:[20,0,0]};
+  const route=await prepareRoverRoute(fixture,start,goal,DEFAULT_ROVER,[start,goal]);
+  assert.ok(route.path.some(p=>Math.abs(p[2])>=4));
+  assert.ok(route.maxHazard<=DEFAULT_ROVER.maxHazard);
+  assert.deepEqual(roverPose(route,1000).position,goal.position);
+});
+
 test('impossible slope and submerged regions fail explicitly instead of playing an unsafe route',async()=> {
   const cliff={...terrain,maxH:100,data:Float64Array.from({length:33**2},(_,k)=>Math.floor(k/33)>=16?100:0)};
   assert.throws(()=>planGridRoute(cliff,analysis.layers,[-10,0,0],[10,100,0],DEFAULT_ROVER),/No route/);

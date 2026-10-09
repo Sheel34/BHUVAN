@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from pipeline.ingest import ingest_geotiff
-from pipeline.terrain_analysis import analyze_terrain, _roughness_std, _curvature_laplacian
+from pipeline.terrain_analysis import analyze_terrain, _roughness_std, _curvature_laplacian, _depression_depth
 from pipeline.landing_zones import _footprint_sensitivity
 from main import build_payload
 
@@ -13,6 +13,33 @@ def test_absolute_offset_does_not_change_analysis():
     b=analyze_terrain(grid+1e6,cell_size_m=1)
     for key in a:
         assert np.allclose(a[key]['data'],b[key]['data'],atol=1e-5)
+
+
+def test_resolved_depression_floor_is_hazardous_without_manual_exclusions():
+    grid = np.zeros((65, 65), dtype=np.float32)
+    grid[30:35, 30:35] = -1
+    layers = analyze_terrain(grid, cell_size_m=1)
+    assert layers['slope']['data'][32, 32] == 0
+    assert layers['hazard']['data'][32, 32] == 1
+    assert layers['traversability']['data'][32, 32] == 0
+    assert layers['hazard']['data'][10, 10] < 1e-6
+
+
+def test_constant_grade_and_patch_edges_are_not_detected_as_depressions():
+    x, y = np.meshgrid(np.arange(65), np.arange(65))
+    plane = 1000 + .1*x + .15*y
+    assert np.max(_depression_depth(plane, 1)) < 1e-3
+    flat = analyze_terrain(np.full((65, 65), 1000.), cell_size_m=2)
+    assert np.count_nonzero(flat['hazard']['data']) == 0
+
+
+def test_depression_depth_is_offset_invariant_and_does_not_invent_missing_detail():
+    grid = np.zeros((65, 65), dtype=np.float32)
+    grid[30:35, 30:35] = -.25
+    assert np.allclose(_depression_depth(grid, 1), _depression_depth(grid+100000, 1))
+    assert analyze_terrain(grid, 1)['hazard']['data'][32, 32] == .5
+    # Coarse flat observations contain no evidence of a hole between samples.
+    assert not np.any(_depression_depth(np.zeros((9, 9)), 30))
 
 
 def test_five_point_laplacian_has_expected_physical_scale():

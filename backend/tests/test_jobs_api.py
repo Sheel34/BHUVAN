@@ -58,6 +58,15 @@ def test_sample_job_is_cached_on_resubmit():
     assert second["cached"] is True
 
 
+def test_analysis_revision_invalidates_sample_cache(monkeypatch):
+    from jobs import routes
+    monkeypatch.setattr(routes, '_submit', lambda job_id, spec: job_id)
+    request=routes.JobRequest(sample='mars-gale')
+    original=routes.create_job(request)
+    monkeypatch.setattr(routes, 'ANALYSIS_REVISION', 'test-new-hazard-model')
+    assert routes.create_job(request)!=original
+
+
 def test_unknown_sample_job_rejected_upfront():
     response = client.post("/api/v2/jobs", json={"sample": "venus-nope"})
     assert response.status_code == 404

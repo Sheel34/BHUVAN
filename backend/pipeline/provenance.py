@@ -1,5 +1,5 @@
 """Source fidelity and analysis assumptions, independent of visualization."""
-from .terrain_analysis import HAZARD_WEIGHTS
+from .terrain_analysis import HAZARD_WEIGHTS, DEPRESSION_DANGER_M, ANALYSIS_REVISION
 
 
 def describe_dataset(metadata: dict, size: int, spacing: float) -> tuple[dict, dict]:
@@ -42,11 +42,13 @@ def describe_dataset(metadata: dict, size: int, spacing: float) -> tuple[dict, d
     if not metric:
         provenance["limitations"].append("Display aspect/relief are arbitrary. No metric slope, roughness, footprint or suitability claim is supported.")
     model = {
-        "kind": "heuristic, unvalidated", "weights": HAZARD_WEIGHTS,
+        "kind": "heuristic, unvalidated", "revision": ANALYSIS_REVISION, "weights": HAZARD_WEIGHTS,
         "slope": {"min": 0, "max": 15, "unit": "degrees" if metric else "index", "clipped": True},
         "roughness": {"min": 0, "max": .5, "unit": "m" if metric else "index", "clipped": True,
             "method": "local elevation standard deviation; includes slope", "window": "max(3 cells, nominal 6 units), limited by patch size"},
         "curvature": "absolute five-point Laplacian; unsigned bending, not ridge/basin identification",
+        "depressions": {"method":"local morphological closing; maximum with weighted hazard", "danger_depth_m":DEPRESSION_DANGER_M if metric else None,
+            "window":"nominal 6 units; 3–63 cells, bounded by patch size", "edge_policy":"two kernel radii excluded", "validated":False},
         "shadow": "local back-facing orientation proxy at azimuth 40°, elevation 45°; no horizon/occlusion computation or ephemeris",
         "candidate_threshold": .42, "low_hazard_threshold": .35,
         "candidate_min_radius": 4 if metric else None,

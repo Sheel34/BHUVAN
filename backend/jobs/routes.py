@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from .celery_app import EAGER, celery_app
 from .tasks import analyze_job, job_dir, write_error
+from pipeline.terrain_analysis import ANALYSIS_REVISION
 
 router = APIRouter(prefix="/api/v2", tags=["jobs"])
 
@@ -112,7 +113,7 @@ def create_job(request: JobRequest):
             },
         )
     job_id = hashlib.sha256(
-        f"sample:{request.sample}:ai={int(request.ai_enhance)}".encode()
+        f"{ANALYSIS_REVISION}:sample:{request.sample}:ai={int(request.ai_enhance)}".encode()
     ).hexdigest()[:32]
     return _submit(
         job_id,
@@ -140,7 +141,7 @@ async def create_upload_job(file: Annotated[UploadFile, File(...)]):
             detail={"code": "FILE_TOO_LARGE", "message": "Maximum upload is 50 MB."},
         )
 
-    job_id = hashlib.sha256(content).hexdigest()[:32]
+    job_id = hashlib.sha256(ANALYSIS_REVISION.encode()+b':'+content).hexdigest()[:32]
     d = job_dir(_output_dir(), job_id)
     os.makedirs(d, exist_ok=True)
     input_path = os.path.join(d, "input.bin")

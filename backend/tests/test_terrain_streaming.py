@@ -25,6 +25,22 @@ def decode(binary):
     return header,dict(zip(header['fields'],values))
 
 
+def test_coarse_planning_retains_a_hazard_between_samples_without_changing_canonical_values(tmp_path):
+    folder=tmp_path/'pit';folder.mkdir()
+    height=np.zeros((257,257),dtype=np.float32)
+    hazard=np.zeros_like(height);hazard[127,128]=1
+    np.save(folder/'height.npy',height);np.save(folder/'hazard.npy',hazard)
+    d={'id':'pit','kind':'analysis-window','fields':['height','hazard']}
+    axis=np.arange(0,257,2)
+    fields=tiles.tile_fields(d,axis,axis)
+    assert not fields['hazard'].any()  # pit lies between point samples
+    assert fields['planning_hazard'][64,64]==1
+    assert fields['planning_hazard'][10,10]==0
+    native=tiles.tile_fields(d,np.arange(125,132),np.arange(125,132))
+    assert native['hazard'][2,3]==1
+    assert 'planning_hazard' not in native
+
+
 def source(tmp_path, size=1033, sparse=False, missing=False):
     path=tmp_path/'source.tif';spacing=1.
     affine=from_origin(-.5,size-.5,spacing,spacing)

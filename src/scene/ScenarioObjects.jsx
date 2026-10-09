@@ -9,23 +9,20 @@ import * as THREE from 'three';
 import { scenarioLabel } from '../engine/rehearsal';
 import { useThree } from '@react-three/fiber';
 
-function RoverModel({runtime}) {
-  const wheels=useRef([]);
-  useFrame(()=> {if(runtime)for(const wheel of wheels.current)if(wheel)wheel.rotation.x=(runtime.current.distance||0)/.34;});
-  return <group>
-    <mesh position={[0,.7,0]} castShadow><boxGeometry args={[1.7,.55,2.3]} /><meshStandardMaterial color="#d6d5ce" metalness={.5} roughness={.38}/></mesh>
-    <mesh position={[0,1.45,.5]} castShadow><cylinderGeometry args={[.045,.045,1.2,8]}/><meshStandardMaterial color="#e9ecec"/></mesh>
-    <mesh position={[0,2.1,.5]}><boxGeometry args={[.45,.2,.2]}/><meshStandardMaterial color="#192936" metalness={.7}/></mesh>
-    {[-1,1].flatMap(side=>[-.85,0,.85].map((z,k)=><group ref={g=>{wheels.current[(side===-1?0:3)+k]=g;}} key={`${side}:${z}`} position={[side,.35,z]}><mesh rotation={[0,0,Math.PI/2]} castShadow>
-      <cylinderGeometry args={[.34,.34,.23,16]}/><meshStandardMaterial color="#282e35" roughness={.9}/></mesh><mesh position={[.13,0,0]}><boxGeometry args={[.035,.045,.6]}/><meshStandardMaterial color="#748291"/></mesh></group>))}
-    <mesh position={[0,1.02,-.2]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[1.65,1.8]}/><meshStandardMaterial color="#233b59" metalness={.65} roughness={.22}/></mesh>
-  </group>;
-}
-
-function Waypoint({object,route,runtime,verticalExaggeration}) {
-  const marker=useRef();
-  useFrame(()=> {if(marker.current)marker.current.visible=!(route?.objectiveId===object.id&&Math.hypot(runtime.current.position[0]-object.position[0],runtime.current.position[2]-object.position[2])<2);});
-  return <mesh ref={marker} position={[0,.08,0]} rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.13,.17,4]}/><meshBasicMaterial color="#bae6e5" side={THREE.DoubleSide} transparent opacity={.7} depthWrite={false}/></mesh>;
+function Waypoint({object,route,runtime,labelText}) {
+  const marker=useRef(),label=useRef(),wasHidden=useRef(false);
+  useFrame(()=> {
+    const hidden=route?.objectiveId===object.id&&(runtime.current.complete||Math.hypot(runtime.current.position[0]-object.position[0],runtime.current.position[2]-object.position[2])<2);
+    if(marker.current)marker.current.visible=!hidden;
+    if(label.current&&Boolean(hidden)!==wasHidden.current) {
+      if(hidden)label.current.style.visibility='hidden';else label.current.style.removeProperty('visibility');
+      wasHidden.current=Boolean(hidden);
+    }
+  });
+  return <>
+    <mesh ref={marker} position={[0,.08,0]} rotation={[-Math.PI/2,0,0]}><ringGeometry args={[.13,.17,4]}/><meshBasicMaterial color="#bae6e5" side={THREE.DoubleSide} transparent opacity={.7} depthWrite={false}/></mesh>
+    <Html position={[2.8,1.2,0]} center style={{pointerEvents:'none',whiteSpace:'nowrap'}} zIndexRange={[8,0]}><span ref={label} className="scenario-label">{labelText}</span></Html>
+  </>;
 }
 function FacilityModel() {
   return <group name="Concept surface habitat">
@@ -78,7 +75,7 @@ export default function ScenarioObjects({ terrain, objects, selectedId, vertical
     if (!cancelled && current?.hit && current.moved) onMove(current.id, current.hit.x, current.hit.z);
   };
   const size = 1;
-  const profile=vehicleProfile(roverProfileId);
+  const profile=vehicleProfile(roverProfileId==='curiosity'?'curiosity':'perseverance');
   if(terrain.metric===false)return null;
   return <group name="User-created scenario objects">
     {objects.map(object => <group key={object.id} visible={!(roverView==='rover'&&object.id===roverRoute?.vehicleId)} ref={object.id===roverRoute?.vehicleId ? rover : undefined} position={[object.position[0], object.position[1] * verticalExaggeration, object.position[2]]}
@@ -99,14 +96,14 @@ export default function ScenarioObjects({ terrain, objects, selectedId, vertical
         if (hit) { d.hit = hit.point.clone(); if (d.moved) d.group.position.copy(hit.point); }
       }}
       onPointerUp={finish} onPointerCancel={e => finish(e, true)}>
-      {object.type==='VEHICLE' ? (profile.asset ? <AssetModel url={profile.asset} width={profile.width} wheelRig={profile.id} armMode={armMode&&object.id===roverRoute?.vehicleId} travelRuntime={object.id===roverRoute?.vehicleId?roverRuntime:null}/> : <RoverModel runtime={object.id===roverRoute?.vehicleId?roverRuntime:null}/>) : ['OBJECTIVE','SCIENCE SITE'].includes(object.type)?<Waypoint object={object} route={roverRoute} runtime={roverRuntime} verticalExaggeration={verticalExaggeration}/> : ['FACILITY','STATION'].includes(object.type)?<FacilityModel/> : <mesh position={[0, object.type==='RELAY'?3:1, 0]} castShadow>
+      {object.type==='VEHICLE' ? <AssetModel url={profile.asset} width={profile.width} wheelRig={profile.id} armMode={armMode&&object.id===roverRoute?.vehicleId} travelRuntime={object.id===roverRoute?.vehicleId?roverRuntime:null}/> : ['OBJECTIVE','SCIENCE SITE'].includes(object.type)?<Waypoint object={object} route={roverRoute} runtime={roverRuntime} labelText={scenarioLabel(objects,object)}/> : ['FACILITY','STATION'].includes(object.type)?<FacilityModel/> : <mesh position={[0, object.type==='RELAY'?3:1, 0]} castShadow>
         {object.type === 'FACILITY' || object.type==='STATION' ? <boxGeometry args={[8, 2, 5]} /> : object.type==='RELAY' ? <cylinderGeometry args={[.1,.2,6,8]}/> : <cylinderGeometry args={[.3,.4,2,12]} />}
         <meshStandardMaterial color={selectedId === object.id ? '#c9f8ff' : '#79b3cf'} metalness={.35} roughness={.3} />
       </mesh>}
       {['FACILITY','STATION','HAZARD REGION'].includes(object.type)&&<ExclusionBoundary terrain={terrain} object={object} route={roverRoute} verticalExaggeration={verticalExaggeration}/>}
-      <Html position={['OBJECTIVE','SCIENCE SITE'].includes(object.type)?[2.8,1.2,0]:[0,3.2,0]} center style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }} zIndexRange={[8, 0]}>
+      {!['OBJECTIVE','SCIENCE SITE'].includes(object.type)&&<Html position={[0,3.2,0]} center style={{ pointerEvents: 'none', whiteSpace: 'nowrap' }} zIndexRange={[8, 0]}>
         <span className="scenario-label">{object.type==='VEHICLE'?profile.name:scenarioLabel(objects,object)}</span>
-      </Html>
+      </Html>}
     </group>)}
   </group>;
 }

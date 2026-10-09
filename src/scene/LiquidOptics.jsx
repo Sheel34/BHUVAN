@@ -7,10 +7,11 @@ import { waterPressure, waterShadow } from '../engine/waterFeedback';
 
 function lensGeometry(width, height) {
   // A convex water volume rather than a flat extruded plaque.
-  const radius=height/2,straight=Math.max(0,(width-height)/2);
+  const radius=Math.min(24,width/2,height/2),straightX=Math.max(0,width/2-radius),straightY=Math.max(0,height/2-radius);
   const geometry=new THREE.SphereGeometry(radius,48,24),position=geometry.attributes.position;
   for(let i=0;i<position.count;i++) {
-    const x=position.getX(i);position.setXYZ(i,x+(x>1e-5?straight:x<-1e-5?-straight:0),position.getY(i),position.getZ(i)*.55);
+    const x=position.getX(i),y=position.getY(i);
+    position.setXYZ(i,x+(x>1e-5?straightX:x<-1e-5?-straightX:0),y+(y>1e-5?straightY:y<-1e-5?-straightY:0),position.getZ(i)*.55);
   }
   geometry.computeVertexNormals();geometry.computeBoundingSphere();
   return geometry;
@@ -25,7 +26,7 @@ function capsuleShadow() {
     fragmentShader: `varying vec2 shadowUv;
       uniform vec2 extent; uniform vec2 halfButton; uniform float softness; uniform vec2 offset; uniform float opacity;
       void main() {
-        float radius = halfButton.y;
+        float radius = min(24.0, min(halfButton.x, halfButton.y));
         vec2 q = abs((shadowUv - .5) * extent) - (halfButton - vec2(radius));
         float edge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
         float outside = max(edge, 0.0) / softness;
@@ -89,11 +90,11 @@ export default function LiquidOptics({ renderMain = true }) {
     const measure = () => {
       pending = 0;
       const bounds = gl.domElement.getBoundingClientRect();
-      const nodes = [...(root?.querySelectorAll('[data-liquid-control]') || [])]
+      const nodes = [...(root?.querySelectorAll('[data-liquid-control],[data-liquid-surface]') || [])]
         .filter(node => {
           if(!node.getClientRects().length || getComputedStyle(node).visibility==='hidden' || node.closest('.inactive-scene,.closed'))return false;
           const panel=node.closest('.hud-left-panel,.hud-right-panel');
-          if(!panel)return true;
+          if(!panel||panel===node)return true;
           const p=panel.getBoundingClientRect(),r=node.getBoundingClientRect();
           return r.top>=p.top+3 && r.bottom<=p.bottom-3 && r.right>bounds.left && r.left<bounds.right;
         });
@@ -104,7 +105,7 @@ export default function LiquidOptics({ renderMain = true }) {
         const pressure = Number(element.style.getPropertyValue('--water-pressure')) || 0;
         const width = rect.width / (1 - .025 * pressure), height = rect.height / (1 - .025 * pressure);
         if (!control) {
-          control = { element, group: new THREE.Group(), width: 0, height: 0, tx: 0, ty: 0, baseY: 0,
+          control = { element, surface:element.hasAttribute('data-liquid-surface'), group: new THREE.Group(), width: 0, height: 0, tx: 0, ty: 0, baseY: 0,
             abort: new AbortController() };
           control.shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capsuleShadow());
           resources.hud.add(control.group, control.shadow);
@@ -112,7 +113,7 @@ export default function LiquidOptics({ renderMain = true }) {
           resize.observe(element);
           const reset = () => { control.tx = control.ty = 0; };
           element.addEventListener('pointermove', event => {
-            if (motion.matches || event.pointerType === 'touch' || element.disabled) return;
+            if (control.surface || motion.matches || event.pointerType === 'touch' || element.disabled) return;
             const box = element.getBoundingClientRect();
             control.tx = THREE.MathUtils.clamp((.5 - (event.clientY - box.top) / box.height) * .22, -.11, .11);
             control.ty = THREE.MathUtils.clamp(((event.clientX - box.left) / box.width - .5) * .22, -.11, .11);
@@ -123,9 +124,9 @@ export default function LiquidOptics({ renderMain = true }) {
           control.group.children.forEach(mesh => { mesh.geometry.dispose(); mesh.material.dispose(); });
           control.group.clear();
           const lens = new THREE.Mesh(lensGeometry(width, height), new THREE.MeshPhysicalMaterial({
-            color: '#effbff', metalness: 0, roughness: .025, transmission: 1, ior: 1.333,
+            color: '#e4e8eb', metalness: 0, roughness: control.surface ? .09 : .025, transmission: 1, ior: 1.333,
             thickness: 8 + depthRef.current * .42, clearcoat: 1, clearcoatRoughness: .08, envMapIntensity: .7,
-            attenuationColor: '#bdedf1', attenuationDistance: 320 }));
+            attenuationColor: control.surface?'#6c7379':'#d4dce2', attenuationDistance: control.surface?90:320 }));
           const wave={value:0},phase={value:0};lens.material.userData.wave=wave;lens.material.userData.phase=phase;
           lens.material.onBeforeCompile=shader=> {
             shader.uniforms.liquidWave=wave;shader.uniforms.liquidPhase=phase;
@@ -142,9 +143,9 @@ export default function LiquidOptics({ renderMain = true }) {
         const x = rect.left - bounds.left + rect.width / 2 - bounds.width / 2;
         const y = bounds.height / 2 - (rect.top - bounds.top + rect.height / 2) + pressure * 3;
         control.baseY = y;control.baseX=x;
-        control.group.position.set(x, y, 0);
+        control.group.position.set(x, y, control.surface?-30:0);
         // Shadow is a sibling: it stays close and fixed while the lens tilts.
-        control.shadow.position.set(x+6, y-8, -45);
+        control.shadow.position.set(x+6, y-8, control.surface?-65:-45);
         control.group.visible = control.shadow.visible = rect.width > 0 && rect.height > 0;
         return control;
       });
@@ -155,7 +156,7 @@ export default function LiquidOptics({ renderMain = true }) {
     const schedule = () => { if (!pending) pending = requestAnimationFrame(measure); };
     const resize = new ResizeObserver(schedule); resize.observe(gl.domElement);
     const mutation = new MutationObserver(schedule);
-    if (root) mutation.observe(root, { childList: true, subtree: true });
+    if (root) mutation.observe(root, { childList: true, subtree: true, attributes:true, attributeFilter:['class','hidden','open'] });
     window.addEventListener('resize', schedule, { signal: abort.signal });
     window.addEventListener('scroll', schedule, { signal: abort.signal, capture: true });
     motion.addEventListener('change', () => controls.current.forEach(control => {
@@ -192,19 +193,19 @@ export default function LiquidOptics({ renderMain = true }) {
       const now = performance.now();
       controls.current.forEach(control => {
         const value = control.element.style.getPropertyValue('--water-pressure');
-        const pressure = value === '' ? waterPressure(control.element, now) : Number(value);
+        const pressure = control.surface?0:value === '' ? waterPressure(control.element, now) : Number(value);
         const material=control.group.children[0].material;
-        material.color.set(control.element.getAttribute('aria-pressed')==='true'||control.element.getAttribute('aria-expanded')==='true' ? '#d1f4fc' : '#effbff');
+        material.color.set(control.element.getAttribute('aria-pressed')==='true'||control.element.getAttribute('aria-expanded')==='true' ? '#cad5dd' : '#e4e8eb');
         material.thickness = (2 + depthRef.current * .65) * (1 - .55 * pressure);
         material.userData.wave.value=pressure*1.8+(Math.abs(control.tx)+Math.abs(control.ty))*5;
         material.userData.phase.value=now*.012;
         control.group.rotation.x = THREE.MathUtils.lerp(control.group.rotation.x, control.tx, ease);
         control.group.rotation.y = THREE.MathUtils.lerp(control.group.rotation.y, control.ty, ease);
-        control.group.position.z = -8 * pressure;
+        control.group.position.z = (control.surface?-30:0)-8 * pressure;
         control.group.position.y = control.baseY - 3 * pressure;
         control.group.scale.set(1 - .025 * pressure, 1 - .025 * pressure, (.35+depthRef.current*.012)*(1 - .6 * pressure));
         const shadow=waterShadow(pressure),uniforms=control.shadow.material.uniforms;
-        control.shadow.position.set(control.baseX+shadow.x,control.baseY-3*pressure+shadow.y,-45);
+        control.shadow.position.set(control.baseX+shadow.x,control.baseY-3*pressure+shadow.y,control.surface?-65:-45);
         uniforms.offset.value.set(shadow.x,shadow.y);uniforms.softness.value=shadow.softness;uniforms.opacity.value=shadow.opacity;
         // Keep the blur canvas padded at its maximum size, only contract its footprint.
         uniforms.halfButton.value.set(control.width*shadow.scale/2,control.height*shadow.scale/2);

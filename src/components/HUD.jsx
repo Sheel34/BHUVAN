@@ -263,7 +263,7 @@ export default function HUD({
       {analysis && !anyOpen && <LayerLegend viewMode={viewMode} analysis={analysis} settings={roverSettings} point={inspectedPoint} />}
 
       {/* ── LEFT RAIL: DATASETS ── */}
-      <div id="dataset-panel" className={`hud-left-panel ${leftOpen ? '' : 'closed'}`}>
+      <div id="dataset-panel" data-liquid-surface="panel" className={`hud-left-panel ${leftOpen ? '' : 'closed'}`}>
         {leftOpen && (
           <>
             <div className="hud-panel-header">DATASETS <button onClick={close} aria-label="Close datasets">×</button></div>
@@ -385,7 +385,7 @@ export default function HUD({
       </div>
 
       {/* ── RIGHT PANEL: INTELLIGENCE ── */}
-      <div id="analysis-panel" tabIndex={-1} className={`hud-right-panel ${rightOpen ? '' : 'closed'}`}>
+      <div id="analysis-panel" data-liquid-surface="panel" tabIndex={-1} className={`hud-right-panel ${rightOpen ? '' : 'closed'}`}>
         {rightOpen && (analysis ? (
           <>
             <div className="hud-panel-header">TERRAIN ANALYSIS <button onClick={close} aria-label="Close analysis">×</button></div>
@@ -488,7 +488,7 @@ export default function HUD({
           <div className="hud-empty-state">SELECT A DATASET TO BEGIN</div>
         ))}
       </div>
-      {infoOpen && <div id="dataset-info-panel" className="hud-right-panel">
+      {infoOpen && <div id="dataset-info-panel" data-liquid-surface="panel" className="hud-right-panel">
         <div className="hud-panel-header">DATASET / ASSUMPTIONS <button onClick={close} aria-label="Close info">×</button></div>
         <div className="hud-section">Planetary Terrain Systems Research Prototype</div>
         <dl className="dataset-details">

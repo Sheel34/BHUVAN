@@ -78,7 +78,7 @@ export default function App() {
   const [verticalExaggeration, setVerticalExaggeration] = useState(1);
   const [ambience, setAmbience] = useState(false);
   const [environment, setEnvironment] = useState({ sunAzimuth: 135, sunElevation: 38, water: false, waterLevel: 0, snow: false, snowLine: 4000, rocks: false, rockDensity: 300 });
-  const [roverSettings, setRoverSettings] = useState({...DEFAULT_ROVER});
+  const [roverSettings, setRoverSettings] = useState({...DEFAULT_ROVER, profileId:'perseverance', speed:.02});
   const [roverRoute, setRoverRoute] = useState(null), [roverView, setRoverView] = useState('orbit');
   const roverRuntime = useRef({position:[0,0,0],progress:0,complete:false,remaining:0,distance:0,relay:'No relay'});
   const [roverTelemetry,setRoverTelemetry] = useState(null);
@@ -131,7 +131,7 @@ export default function App() {
     setScenarioBusy(true);setScenarioError('');
     try {
       const placement=await findRehearsalPlacement(analysis,roverSettings,scenarioObjects.filter(o=>o.origin!=='rehearsal'),environment,controller.signal);
-      const specs=rehearsalObjectPositions(analysis.terrain,placement);
+      const specs=rehearsalObjectPositions(analysis.terrain,placement).filter(([type])=>type==='VEHICLE'||type==='OBJECTIVE');
       const objects=await Promise.all(specs.map(async([type,px,pz])=>createScenarioObject(type,await terrainAttachment(analysis.terrain,px,pz,controller.signal),datasetKey,0,crypto.randomUUID())));
       if(controller.signal.aborted)return;
       setObjectsByDataset(previous=>({...previous,[datasetKey]:[...(previous[datasetKey]||[]).filter(o=>o.origin!=='rehearsal'),...objects.map(o=>({...o,origin:'rehearsal'}))]}));setSelectedObjectId(objects[0].id);

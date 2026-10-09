@@ -43,7 +43,7 @@ export default function GlobeOverlay({
     <div className={`globe-overlay orbit-overlay ${infoOpen ? 'orbit-panel-open' : ''} ${gatewayView?'gateway-inspection':''}`}>
       <header className="globe-header">
         <BhuvanMark />
-        <h1 className="globe-title">BHUVAN</h1>
+        <h1 className="globe-title sr-only">BHUVAN</h1>
         <p className="globe-subtitle">PLANETARY WORKSPACE</p>
       </header>
       <div className="orbit-motion-controls" role="group" aria-label="Orbital motion">

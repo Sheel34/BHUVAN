@@ -16,7 +16,7 @@ export function EnvironmentPanel({ analysis, mobile, qualityTier, onQualityChang
   const profile = ENVIRONMENT_PROFILES[analysis?.terrain?.body] || ENVIRONMENT_PROFILES.moon;
   const quality = resolveQuality(qualityTier, mobile);
   const { depth, setDepth } = useLiquidPreferences();
-  return <div id="environment-panel" className="hud-right-panel">
+  return <div id="environment-panel" className="hud-right-panel" data-liquid-surface="panel">
     <div className="hud-panel-header">ENVIRONMENT <button onClick={close} aria-label="Close environment">×</button></div>
     <div className="hud-section"><div className="hud-section-label">ACTIVE GRAPHICS DEVICE</div><p className="gpu-readout" data-client-gpu={clientGpu?.renderer}>{clientGpu?.renderer||'Reading browser renderer…'}</p><p className="assumption">Browser-selected GPU · 30 FPS target (Ultra: 45). Rendering uses the user's device.</p></div>
     <div className="hud-section"><div className="hud-section-label">{profile.body.toUpperCase()} · {profile.sky.toUpperCase()}</div>
@@ -73,7 +73,7 @@ export function EnvironmentPanel({ analysis, mobile, qualityTier, onQualityChang
         <p className="assumption">Scenario water excludes submerged routes. Snow is a visual elevation mask, not a snow observation or traction model.</p>
       </>}
       <button className="hud-action-btn" disabled={!analysis||Boolean(analysis.terrain.stream)} aria-pressed={environment.rocks} onClick={()=>update('rocks',!environment.rocks)}>VISUAL ROCK STRESS-TEST · {environment.rocks?'ON':'OFF'}</button>
-      <p className="assumption">Seeded decorative rocks on memory-backed terrain; never recorded as observed rocks. For routing exclusions place a Hazard Region.</p>
+      <p className="assumption">Decorative rocks only. Routing uses DEM hazards and supplied features.</p>
     </div>
   </div>;
 }
@@ -95,13 +95,13 @@ function RoverSpeed({speed,nominal,onChange}) {
 
 export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlacement, onMove, onRotate, onConstraint,
   clockState, onClock, error, busy, close, roverRoute, roverTelemetry, roverSettings, onRoverSettings, roverView, onRoverView, onPlanRoute, onDemoScenario,onOpenDatasets }) {
-  const profile=vehicleProfile(roverSettings.profileId);
+  const profile=vehicleProfile(roverSettings.profileId==='generic'?'perseverance':roverSettings.profileId);
   const selected = objects.find(o => o.id === selectedId);
   const unit = 'm';
-  if(!analysis?.metadata?.provenance?.metric)return <div id="scenario-panel" className="hud-right-panel"><div className="hud-panel-header">SCENARIO<button onClick={close} aria-label="Close scenario">×</button></div><div className="hud-section"><h3>Choose terrain with a known scale</h3><p className="assumption">This image is available for visual exploration. Rover motion needs elevation in metres.</p><button className="hud-action-btn" onClick={onOpenDatasets}>CHOOSE METRIC TERRAIN</button><p className="assumption">Use a measured DEM, or an offline engineering range for a demonstration.</p></div></div>;
-  return <div id="scenario-panel" className="hud-right-panel">
+  if(!analysis?.metadata?.provenance?.metric)return <div id="scenario-panel" className="hud-right-panel" data-liquid-surface="panel"><div className="hud-panel-header">SCENARIO<button onClick={close} aria-label="Close scenario">×</button></div><div className="hud-section"><h3>Choose terrain with a known scale</h3><p className="assumption">Rover motion needs elevation in metres.</p><button className="hud-action-btn" onClick={onOpenDatasets}>CHOOSE METRIC TERRAIN</button><p className="assumption">Measured DEM or offline test range.</p></div></div>;
+  return <div id="scenario-panel" className="hud-right-panel" data-liquid-surface="panel">
     <div className="hud-panel-header">SCENARIO <button onClick={close} aria-label="Close scenario">×</button></div>
-    <div className="hud-section"><label className="workspace-field">MISSION VEHICLE<select aria-label="Mission vehicle" value={profile.id} onChange={e=>onRoverSettings(p=>({...p,profileId:e.target.value,speed:vehicleProfile(e.target.value).speed}))}>{Object.values(VEHICLE_PROFILES).map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
+    <div className="hud-section"><label className="workspace-field">MISSION VEHICLE<select aria-label="Mission vehicle" value={profile.id} onChange={e=>onRoverSettings(p=>({...p,profileId:e.target.value,speed:vehicleProfile(e.target.value).speed}))}>{Object.values(VEHICLE_PROFILES).filter(p=>p.asset).map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select></label>
       <p>{profile.science}</p><p className="assumption">{profile.task}. Mars vehicle; this rehearsal is hypothetical.</p>
       <p className="assumption">Track {profile.track} m · wheelbase {profile.wheelbase} m (approximate).</p>
     </div>
@@ -115,7 +115,7 @@ export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlace
     <div className="hud-section"><div className="hud-section-label">ROVER → OBJECTIVE</div>
       <button className="hud-action-btn" disabled={!analysis?.metadata?.provenance?.metric||busy} onClick={onDemoScenario}>CREATE ROVER REHEARSAL</button>
       {analysis && !analysis.metadata?.provenance?.metric && <p className="assumption">Load a metric DEM to rehearse the metre-sized rover. An uncalibrated photograph cannot establish wheel spacing, travel speed or physical ground clearance.</p>}
-      <p className="assumption">Place a rover, destination, facility and relay. Then select Plan Route.</p>
+      <p className="assumption">Place a rover and objective → Plan Route. DEM hazards are mapped automatically.</p>
       <label className="workspace-field">DESTINATION<select aria-label="Rover destination" value={roverSettings.objectiveId||objects.find(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type))?.id||''} onChange={e=>onRoverSettings(previous=>({...previous,objectiveId:e.target.value}))}>
         {!objects.some(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type)) && <option value="">Place an objective first</option>}
         {objects.filter(o=>['OBJECTIVE','SCIENCE SITE'].includes(o.type)).map(o=><option key={o.id} value={o.id}>{scenarioLabel(objects,o)}</option>)}
@@ -142,17 +142,20 @@ export function ScenarioPanel({ analysis, objects, selectedId, onSelect, onPlace
         <div className="glass-segments" role="group" aria-label="Rover camera">{['orbit','chase','rover'].map(view=><button key={view} aria-pressed={roverView===view} onClick={()=>{onRoverView(view);close();}}>{view==='rover'?'ROVER POV':view.toUpperCase()}</button>)}</div>
         <p className="assumption">{roverRoute.fidelity} · source grid {roverRoute.sourceGsd.toFixed(2)} {unit}/cell · planning grid {roverRoute.planningGsd.toFixed(2)} {unit}/cell. Corridor checks sample the analysis DEM; they cannot resolve unmapped rocks or validate traction.</p>
       </>}
-      <p className="assumption">Add a hazard or facility, then replan to test a detour.</p>
+      <p className="assumption">The route avoids resolved DEM hazards. Smaller holes need finer data.</p>
       <p className="assumption">Kinematic preview. Soil, suspension forces, power and landing dynamics are not simulated.</p>
     </div>
     <div className="hud-section"><div className="hud-section-label">ADD OBJECT → CLICK TERRAIN</div>
-      <div className="scenario-types">{SCENARIO_TYPES.map(type => <button key={type} className="hud-action-btn" disabled={!analysis || busy}
-        onClick={() => { onPlacement({ type }); close(); }}>{type}</button>)}</div>
+      <div className="scenario-types">{['VEHICLE','OBJECTIVE'].map(type => <button key={type} className="hud-action-btn" disabled={!analysis || busy}
+        onClick={() => { onPlacement({ type }); close(); }}>{type==='VEHICLE'?'PLACE ROVER':'PLACE OBJECTIVE'}</button>)}</div>
+      <details className="optional-infrastructure"><summary>Optional infrastructure</summary>
+        <div className="scenario-types">{SCENARIO_TYPES.filter(type=>!['VEHICLE','OBJECTIVE','HAZARD REGION'].includes(type)).map(type=><button key={type} className="hud-action-btn" disabled={busy} onClick={()=>{onPlacement({type});close();}}>{type}</button>)}</div>
+      </details>
       {busy && <p role="status" className="assumption">Reading native terrain height…</p>}
       {error && <p role="alert" className="hud-status-message">{error}</p>}
     </div>
     <div className="hud-section"><div className="hud-section-label">USER-CREATED OBJECTS · {objects.length}</div>
-      {!objects.length && <p className="assumption">No objects placed. Place a route start, destination, exclusion or relay endpoint.</p>}
+      {!objects.length && <p className="assumption">Place a rover and objective, or create a rehearsal.</p>}
       {objects.map(o => <button className="hud-action-btn secondary" key={o.id} aria-pressed={selectedId === o.id} onClick={() => onSelect(o.id)}>{scenarioLabel(objects,o)}</button>)}
     </div>
     {selected && <div className="hud-section" key={selected.id}>

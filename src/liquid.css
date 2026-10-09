@@ -1,8 +1,8 @@
 /* BHUVAN liquid surface: application chrome only. Scientific layer palettes
    and source/uncertainty labels retain their original meanings. */
 .liquid-ui {
-  --font-display: 'Segoe UI', Arial, sans-serif;
-  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --font-display: 'Outfit', 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
   --text-primary: #eeeef8; --text-secondary: #aaaabd; --text-dim: #8d8fa7;
   --accent-cyan: #c5c8f3; --accent-blue: #b2b8e7;
   --glass-rim: rgba(222,223,255,.23);
@@ -157,10 +157,10 @@
 .liquid-ui .orbit-breadcrumb button { min-height: 36px; border-radius: 22px; background: rgba(179,193,239,.04); font: 10px var(--font-display); border-color: rgba(202,210,250,.15); color: #b8c4ed; }
 .liquid-ui .orbit-overlay .globe-sites { display: flex; position: absolute; top: 150px; right: 38px; width: 224px; gap: 0; }
 .liquid-ui .globe-sites-label { color: #929ab6; font: 10px var(--font-mono); letter-spacing: .15em; margin-bottom: 14px; }
-.liquid-ui .globe-site-btn { min-height: 58px; padding: 13px 0; border: 0; border-bottom: 1px solid rgba(183,195,238,.14);
-  border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; color: #c4cee9; }
+.liquid-ui .globe-site-btn { min-height: 68px; padding: 16px 24px; border: 1px solid rgba(215,226,235,.25);
+  border-radius: 24px; background: none; box-shadow: none; backdrop-filter: none; color: #e1e7ed; }
 .liquid-ui .globe-site-btn-name { font-size: 13px; font-weight: 400; letter-spacing: .02em; }
-.liquid-ui .globe-site-btn-coords { font-size: 10px; color: #7e8caa; }
+.liquid-ui .globe-site-btn-coords { font: 10px var(--font-mono); color: #d7dde3; }
 .liquid-ui .globe-site-btn:hover { background: none; border-color: #9baedb; }
 .liquid-ui .liquid-mission-note { font-size: 11px; color: #909bb9; line-height: 1.8; max-width: 210px; margin-top: 16px; }
 .liquid-ui .orbit-overlay .globe-footer { position: absolute; left: 38px; right: 38px; bottom: 14px; margin: 0; padding: 0;
@@ -236,7 +236,7 @@
     min-height: 48px; width: 100%; padding: 9px; color: #dae4fb; border: 0; background: transparent; cursor: pointer; }
   .liquid-ui .liquid-mobile-missions button span { font-size: 9px; color: #91a4c4; }
   .liquid-ui .orbit-overlay .globe-sites { top: auto; bottom: 165px; right: 18px; width: 155px; }
-  .liquid-ui .globe-site-btn { min-height: 44px; padding: 8px 0; }
+  .liquid-ui .globe-site-btn { min-height: 54px; padding: 12px 20px; }
   .liquid-ui .globe-site-btn-name { font-size: 11px; } .liquid-ui .globe-site-btn-coords { font-size: 9px; }
   .liquid-ui .liquid-mission-note { display: none; }
   .liquid-ui .orbit-overlay .globe-footer { left: 18px; right: 18px; bottom: 6px; margin: 0; flex-direction: column; gap: 3px; }
@@ -385,7 +385,7 @@
 }
 .liquid-ui :is(.hud-panel-header,.hud-dataset-name,.workspace-field,.route-summary) { color:#edf8fc; }
 .liquid-ui :is(.assumption,.hud-dataset-sub,.dataset-details dt) { color:#b8cdd6; }
-.liquid-ui .hud-section-label { color:#a4d7e0; }
+.liquid-ui .hud-section-label { color:#bfc8cf; }
 .liquid-ui :is(.hud-dataset-btn,.hud-action-btn,.glass-segments button,.hud-zone-card)[data-optical="ready"] {
   background:transparent;box-shadow:none;border-color:transparent;
 }
@@ -505,7 +505,7 @@
 /* Drawer contents own their space. Hide scene annotations while reading. */
 .liquid-ui:has(.hud-overlay.panel-open) :is(.dataset-fidelity,.hud-legend,.terrain-annotation-hint,.scenario-label,.liquid-tool-rail,.liquid-workspace-caption) {visibility:hidden;}
 .liquid-ui .hud-overlay.panel-open .hud-drawer-backdrop {z-index:20;background:rgba(3,9,16,.25);backdrop-filter:blur(2px);}
-.liquid-ui .hud-overlay.panel-open :is(.hud-left-panel,.hud-right-panel) {z-index:40;top:112px;bottom:142px;max-height:none;padding:22px;background:linear-gradient(145deg,rgba(18,35,44,.86),rgba(5,14,23,.91));backdrop-filter:blur(20px);overflow-y:auto;}
+.liquid-ui .hud-overlay.panel-open :is(.hud-left-panel,.hud-right-panel) {z-index:40;top:112px;bottom:142px;max-height:none;padding:24px;background:linear-gradient(145deg,rgba(34,39,44,.64),rgba(10,14,18,.72));backdrop-filter:blur(12px);overflow-y:auto;box-shadow:inset 1px 2px 2px #fff3,inset -1px -1px 2px #0007,7px 10px 16px -8px #0009;border-color:#d4dade66;}
 .liquid-ui .hud-overlay.panel-open :is(.hud-top,.liquid-dock) {z-index:45;}
 .liquid-ui .rover-speed-editor .glass-segments {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
 .liquid-ui .rover-speed-editor .glass-segments button {display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:44px;padding:0 6px;white-space:nowrap;line-height:1.2;text-align:center;}
@@ -524,5 +524,49 @@
  .liquid-ui .hud-overlay.panel-open :is(.hud-left-panel,.hud-right-panel) {top:140px;bottom:100px;left:18px;right:18px;width:auto;max-height:none;padding:18px;}
  .liquid-ui.rover-view .dataset-fidelity {top:128px;bottom:auto;left:18px;width:300px;max-width:calc(100% - 36px);text-align:left;}
  .liquid-ui .terrain-view-controls:has(.rover-view-switch) {width:calc(100% - 36px);}
- .liquid-ui .bhuvan-mark.liquid-emblem {width:112px;height:24px;}
+.liquid-ui .bhuvan-mark.liquid-emblem {width:112px;height:24px;}
+}
+
+/* Reserve the left utility column; camera actions occupy the right column. */
+.liquid-ui .orbit-overlay .globe-header {grid-template-columns:auto;gap:8px;}
+.liquid-ui .orbit-overlay .globe-header .liquid-emblem {grid-column:1;grid-row:1;}
+.liquid-ui .orbit-overlay .globe-header .globe-subtitle {grid-column:1;grid-row:2;}
+.liquid-ui .globe-sites {gap:10px!important;}
+.liquid-ui .globe-sites .globe-site-btn {display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;width:100%;box-sizing:border-box;text-align:left;}
+.liquid-ui .liquid-mission-note {margin:6px 0 0;}
+.liquid-ui .globe-sites {max-height:calc(100dvh - 350px);overflow-y:auto;padding:0 4px 12px;}
+.liquid-ui .globe-site-btn :is(span,strong) {max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.3;}
+.liquid-ui .globe-site-btn {text-shadow:0 1px 2px #080d14,0 1px 5px #080d14;}
+.liquid-ui :is(.hud-dataset-btn,.hud-zone-card) {padding:16px 24px;border-radius:24px;}
+.liquid-ui .terrain-view-controls,
+.liquid-ui .terrain-view-controls:has(.rover-view-switch) {left:300px;right:30px;width:auto;max-width:none;gap:12px;}
+.liquid-ui .terrain-view-controls > .terrain-focus-control {min-height:40px;padding:0 16px;font-size:11px;}
+.liquid-ui .rover-view-switch {gap:12px;}
+.liquid-ui.rover-view .terrain-view-controls {left:38px;}
+.liquid-ui .globe-subtitle {font-family:var(--font-mono);}
+.liquid-ui :is(.hud-panel-header,.workspace-field,.hud-section-label) {letter-spacing:.035em;}
+.liquid-ui :is(.scene-status,.scene-texture-note,.hud-status-message,.capture-notice) {border:1px solid #d4dade55;border-radius:20px;background:linear-gradient(145deg,#31373e88,#0b1018a0);backdrop-filter:blur(12px);box-shadow:inset 1px 2px 2px #fff3,5px 8px 12px -6px #0008;color:#e6eaef;}
+.liquid-ui:has(.hud-overlay.panel-open) :is(.terrain-annotations,.scene-status,.scene-texture-note,.placement-note,.capture-notice) {visibility:hidden;}
+.liquid-ui .optional-infrastructure {margin-top:16px;}
+.liquid-ui .optional-infrastructure .scenario-types {margin-top:12px;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"] {width:48px!important;height:28px!important;margin:0 8px 0 0!important;border-color:#d3d9df77;background:linear-gradient(155deg,#dbe2e83a,#080d14a0);box-shadow:inset 1px 1px 2px #fff5,inset -1px -2px 3px #0008,3px 4px 5px -3px #0009;transition:translate 140ms,box-shadow 140ms;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]::after {width:18px;height:18px;top:4px;left:4px;background:radial-gradient(circle at 28% 22%,#fff 0,#dde2e7 18%,#667580 73%,#3d4855);box-shadow:2px 3px 4px -1px #000b,inset 0 1px 1px #fff9;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]:checked {background:linear-gradient(155deg,#dbe2e855,#101a2470);}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]:checked::after {transform:translateX(20px);background:radial-gradient(circle at 28% 22%,#fff 0,#edf0f3 18%,#8696a1 73%,#53606d);}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]:active {translate:0 2px;box-shadow:inset 1px 2px 4px #0006;}
+.liquid-ui input[type="range"] {appearance:none;-webkit-appearance:none;width:100%;height:30px;min-height:30px;margin:0;background:transparent;cursor:pointer;border:0;padding:0;}
+.liquid-ui input[type="range"]::-webkit-slider-runnable-track {height:8px;border-radius:12px;border:1px solid #d3d9df44;background:linear-gradient(#0b1119a0,#8996a128);box-shadow:inset 1px 2px 3px #0008,0 1px 1px #fff2;}
+.liquid-ui input[type="range"]::-webkit-slider-thumb {appearance:none;-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;border:1px solid #ecf0f488;background:radial-gradient(circle at 28% 22%,#fff 0,#cbd3db 18%,#677987 72%,#273746);box-shadow:3px 5px 5px -2px #000a,inset 0 1px 1px #fff8;transition:transform 140ms,box-shadow 140ms;}
+.liquid-ui input[type="range"]:active::-webkit-slider-thumb {transform:translateY(1px) scale(.94);box-shadow:1px 2px 3px -1px #0008;}
+.liquid-ui input[type="range"]::-moz-range-track {height:8px;border-radius:12px;border:1px solid #d3d9df44;background:linear-gradient(#0b1119a0,#8996a128);box-shadow:inset 1px 2px 3px #0008;}
+.liquid-ui input[type="range"]::-moz-range-thumb {width:22px;height:22px;border-radius:50%;border:1px solid #ecf0f488;background:radial-gradient(circle at 28% 22%,#fff,#cbd3db 18%,#677987 72%,#273746);box-shadow:3px 5px 5px -2px #000a;}
+@media(max-width:820px) {
+ .liquid-ui .terrain-view-controls,.liquid-ui .terrain-view-controls:has(.rover-view-switch),.liquid-ui.rover-view .terrain-view-controls {left:18px;right:18px;width:auto;}
+ .liquid-ui .orbit-overlay .globe-header {gap:5px;}
+ .liquid-ui:not(.rover-view):has(.rover-view-switch) .dataset-fidelity {top:292px;bottom:auto;left:18px;width:calc(100% - 36px);max-width:none;}
+ .liquid-ui .hud-legend .layer-purpose {display:none;}
+}
+@media(max-width:820px) and (max-height:620px) {
+ .liquid-ui:has(.rover-view-switch) .liquid-workspace-caption {display:none;}
+ .liquid-ui:not(.rover-view):has(.rover-view-switch) .dataset-fidelity {top:185px;}
 }

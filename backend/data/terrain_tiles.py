@@ -302,8 +302,21 @@ def tile_fields(d, rows, cols):
     # All fields, including geometry, use the SAME retained analysis samples.
     # Re-reading remote source products here is both expensive and wrong after
     # overview aggregation/reprojection: it can disagree with rover contacts.
-    return {field:np.asarray(np.load(folder/f'{field}.npy',mmap_mode='r')[np.ix_(rows,cols)],dtype=np.float32)
-            for field in d['fields']}
+    fields = {field:np.asarray(np.load(folder/f'{field}.npy',mmap_mode='r')[np.ix_(rows,cols)],dtype=np.float32)
+              for field in d['fields']}
+    step = max(int(np.diff(rows).max()) if len(rows)>1 else 1, int(np.diff(cols).max()) if len(cols)>1 else 1)
+    if 'hazard' in fields and step>1:
+        # Keep canonical point samples for inspection/rendering, and transmit
+        # an explicitly separate conservative field for coarse route planning.
+        hazard = np.load(folder/'hazard.npy', mmap_mode='r')
+        radius = int(np.ceil(step/2))
+        pooled = np.empty((len(rows),len(cols)),dtype=np.float32)
+        for i,row in enumerate(rows):
+            for j,col in enumerate(cols):
+                window = hazard[max(0,row-radius):row+radius+1,max(0,col-radius):col+radius+1]
+                pooled[i,j] = float(window.max()) if np.isfinite(window).all() else 1
+        fields['planning_hazard'] = pooled
+    return fields
 
 
 def encode_tile(d, level, x, y):
@@ -320,7 +333,8 @@ def encode_tile(d, level, x, y):
             'fields':list(fields),'encoding':'float32-le','min_h':float(height.min()),'max_h':float(height.max()),
             'gsd_m':d['cell_size_m']*2**level,'analysis_gsd_m':d['analysis']['gsd_m'] if d['analysis'] else None,
             'resampling':{'height':'point selection from retained analysis grid' if d['kind']=='analysis-window' else 'bilinear COG warp at display GSD; sample coordinates retain endpoints' if d['kind']=='cog-window' else 'evaluated test function',
-                          'quantitative_layers':'point selection from original analytical grid' if d['analysis'] else 'unavailable; no analysis inferred'},
+                          'quantitative_layers':'point selection from original analytical grid' if d['analysis'] else 'unavailable; no analysis inferred',
+                          'planning_hazard':'maximum within half an LOD step of each sample; unknowns excluded' if 'planning_hazard' in fields else 'native hazard samples'},
             'warp_tolerance_pixels':1e-9 if d['kind']=='cog-window' else None,
             'nodata':d['nodata'],'server_rss_bytes':_rss(),'read_ms':(time.perf_counter()-start)*1000}
     encoded=json.dumps(header,separators=(',',':'),allow_nan=False).encode()

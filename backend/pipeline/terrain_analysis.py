@@ -13,6 +13,24 @@ SLOPE_SAFE_DEG = 5.0
 SLOPE_DANGER_DEG = 15.0
 ROUGHNESS_DANGER_M = 0.5
 CURVATURE_DANGER_INV_M = 0.1
+DEPRESSION_DANGER_M = 0.5
+ANALYSIS_REVISION = 'resolved-depressions-2'
+
+
+def _depression_depth(elevation_m: np.ndarray, cell_size_m: float) -> np.ndarray:
+    # Closing fills local lows without interpreting a constant grade as a pit.
+    # The window is bounded; this is a screening heuristic, not rock detection.
+    radius = min(max(1, int(np.ceil(3.0 / cell_size_m))), 31, (min(elevation_m.shape) - 1) // 4)
+    if radius < 1:
+        return np.zeros_like(elevation_m, dtype=np.float32)
+    kernel = np.ones((2 * radius + 1, 2 * radius + 1), dtype=np.uint8)
+    closed = cv2.morphologyEx(elevation_m.astype(np.float32), cv2.MORPH_CLOSE, kernel)
+    depth = np.maximum(closed - elevation_m, 0).astype(np.float32)
+    # Both morphology passes need neighbours. Do not create pits at patch edges.
+    margin = 2 * radius
+    depth[:margin, :] = depth[-margin:, :] = 0
+    depth[:, :margin] = depth[:, -margin:] = 0
+    return depth
 
 def _slope_degrees(elevation_m: np.ndarray, cell_size_m: float) -> np.ndarray:
     grad_y, grad_x = np.gradient(elevation_m.astype(np.float32), cell_size_m)
@@ -104,6 +122,8 @@ def analyze_terrain(
         0.0,
         1.0,
     ).astype(np.float32)
+    depression_risk = np.clip(_depression_depth(elevation_m, cell_size_m) / DEPRESSION_DANGER_M, 0, 1)
+    hazard = np.maximum(hazard, depression_risk).astype(np.float32)
     traversability = (1.0 - hazard).astype(np.float32)
 
     return {
