@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -23,7 +23,7 @@ function colorTile(terrain,layers,viewMode,tile,imagery) {
   attr.needsUpdate=true;
 }
 
-export default React.memo(function TerrainChunked({ terrain,layers,viewMode,colorMap,onReady,onError,debugMode=false,onStats,benchmarkMode='tiled',verticalExaggeration=1,quality={dpr:1},environment={} }) {
+export default memo(function TerrainChunked({ terrain,layers,viewMode,colorMap,onReady,onError,debugMode=false,onStats,benchmarkMode='tiled',verticalExaggeration=1,quality={dpr:1},environment={} }) {
   const { camera,size,controls }=useThree();
   const bounds=useMemo(()=>terrainRenderBounds(terrain,verticalExaggeration),[terrain,verticalExaggeration]);
   const viewport=useRef();viewport.current={height:size.height*quality.dpr,controls,bounds};
