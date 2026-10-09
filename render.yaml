@@ -1,5 +1,5 @@
 # Render.com blueprint for the BHUVAN FastAPI backend.
-# Frontend deploys separately to Vercel (see vercel.json + docs/DEPLOYMENT.md).
+# Frontend deploys separately to Vercel (see vercel.json).
 services:
   - type: web
     name: bhuvan-api

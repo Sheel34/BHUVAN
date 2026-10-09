@@ -28,6 +28,8 @@ export function readWebGLGpu(rendererOrGl) {
     renderer: rendererText,
     vendor: vendor ? String(vendor) : null,
     software,
+    integrated: /intel|uhd|iris|radeon.*graphics(?!.*rx)/i.test(rendererText),
+    nvidia: /nvidia/i.test(rendererText),
     webgl2: gl instanceof WebGL2RenderingContext,
   };
 }

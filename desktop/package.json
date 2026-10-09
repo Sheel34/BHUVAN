@@ -1,0 +1,8 @@
+{
+  "name": "bhuvan-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": { "start": "electron ." },
+  "devDependencies": { "electron": "44.7.0" }
+}

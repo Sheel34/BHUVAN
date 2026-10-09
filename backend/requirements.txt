@@ -10,7 +10,7 @@ python-multipart
 celery>=5.4
 redis>=5.0
 
-# hardware telemetry (SystemMonitor panel)
+# hardware telemetry (Performance panel)
 psutil>=5.9
 nvidia-ml-py>=12.0
 

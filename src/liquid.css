@@ -1,0 +1,528 @@
+/* BHUVAN liquid surface: application chrome only. Scientific layer palettes
+   and source/uncertainty labels retain their original meanings. */
+.liquid-ui {
+  --font-display: 'Segoe UI', Arial, sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --text-primary: #eeeef8; --text-secondary: #aaaabd; --text-dim: #8d8fa7;
+  --accent-cyan: #c5c8f3; --accent-blue: #b2b8e7;
+  --glass-rim: rgba(222,223,255,.23);
+  --glass-shadow: 0 4px 9px -5px rgba(0,0,0,.6);
+  color: var(--text-primary); font-family: var(--font-display); background: #0c0e17;
+}
+.liquid-ui button, .liquid-ui input, .liquid-ui select { font-family: var(--font-display); }
+.liquid-ui button { touch-action: manipulation; }
+.liquid-ui button:focus-visible, .liquid-ui input:focus-visible, .liquid-ui a:focus-visible,
+.liquid-ui summary:focus-visible { outline: 2px solid #d1d3ff; outline-offset: 4px; }
+.liquid-ui button:disabled { cursor: not-allowed; opacity: .45; }
+.liquid-ui :is(.hud-top-left,.hud-layer-selector,.hud-drawer-controls,.hud-left-panel,.hud-right-panel,
+  .hud-legend,.dataset-fidelity,.globe-site-btn,.dossier,.report-modal,.orbit-info-panel,.acquisition-panel)::before,
+.liquid-ui :is(.hud-top-left,.hud-layer-selector,.hud-drawer-controls,.hud-left-panel,.hud-right-panel,
+  .hud-legend,.dataset-fidelity,.globe-site-btn,.dossier,.report-modal,.orbit-info-panel,.acquisition-panel)::after { content: none; }
+.liquid-ui :is(.hud-layer-btn,.hud-dataset-btn,.hud-action-btn,.globe-site-btn,.globe-workbench-btn,
+  .glass-segments button,.terrain-focus-control,.hud-drawer-controls button) {
+  transform: none; transition: color .15s, background-color .15s, border-color .15s; text-shadow: none;
+}
+.liquid-ui :is(.hud-layer-btn,.hud-dataset-btn,.hud-action-btn,.globe-site-btn,.glass-segments button,
+  .terrain-focus-control,.hud-drawer-controls button):is(:hover,:active) { transform: none; }
+.liquid-ui .liquid-emblem { width: 38px; height: 38px; flex-shrink: 0; }
+.liquid-ui .bhuvan-mark { overflow: visible; fill: none; stroke: #e4f1ff; stroke-width: 1.45;
+  stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 2px rgba(9,23,38,.6)); }
+.liquid-ui .bhuvan-mark-field { fill: rgba(151,207,233,.13); stroke: none; }
+.liquid-ui .bhuvan-mark-transect { stroke: #a7e1f8; stroke-width: 1.8; }
+.liquid-ui .bhuvan-mark-fix { fill: #d8f2ff; stroke-width: 1; }
+.liquid-ui .liquid-eyebrow, .liquid-ui .liquid-rail-label { color: #a5a7c2; font: 10px var(--font-mono); letter-spacing: .15em; }
+.liquid-ui .hud-top { top: 26px; left: 36px; right: 36px; grid-template-columns: 1fr auto; gap: 18px; min-height: 48px; }
+.liquid-ui .hud-top-left { min-height: 48px; padding: 0; border: 0; border-radius: 0; background: none;
+  box-shadow: none; backdrop-filter: none; display: flex; align-items: center; gap: 20px; }
+.liquid-ui .hud-branding { display: grid; grid-template-columns: 38px auto; column-gap: 12px; row-gap: 3px; align-items: center; }
+.liquid-ui .hud-branding .liquid-emblem { grid-row: 1 / 3; }
+.liquid-ui .hud-logo { background: none; -webkit-text-fill-color: #eeeef8; color: #eeeef8; font: 600 17px var(--font-display); letter-spacing: .12em; }
+.liquid-ui .hud-version { color: #9092ad; font-size: 9px; letter-spacing: .14em; }
+.liquid-ui .liquid-api-status { display: flex; gap: 6px; align-items: center; color: #aaaabd; font-size: 10px; }
+.liquid-ui .liquid-api-status i { width: 5px; height: 5px; background: #9acdbd; border-radius: 50%; }
+.liquid-ui .hud-top-center { display: none; }
+.liquid-ui .hud-top-right { order: initial; justify-self: end; align-self: center; }
+.liquid-ui .hud-layer-selector { background: rgba(17,18,29,.55); border: 1px solid rgba(202,205,243,.16);
+  padding: 4px; gap: 2px; border-radius: 28px; box-shadow: none; backdrop-filter: blur(12px); }
+.liquid-ui .hud-layer-btn { min-width: 0; min-height: 38px; padding: 0 12px; border-radius: 22px;
+  font-size: 10px; letter-spacing: .05em; font-weight: 500; color: #a7a9bf; }
+.liquid-ui .hud-layer-btn.active { color: #ececf8; background: rgba(176,180,232,.15);
+  border-color: rgba(201,204,249,.25); box-shadow: none; }
+.liquid-ui .hud-layer-btn.active::after { display: none; }
+.liquid-ui .hud-layer-btn:hover:not(:disabled) { background-color: rgba(202,205,243,.1); color: #eeeef8; }
+.liquid-ui .liquid-dock { top: auto; bottom: calc(38px + env(safe-area-inset-bottom)); left: 50%; right: auto;
+  transform: translateX(-50%); display: flex; width: max-content; max-width: calc(100% - 32px);
+  gap: 16px; padding: 0; border: 0; background: none; background-image: none; box-shadow: none;
+  backdrop-filter: none; border-radius: 0; overflow: visible; z-index: 40; }
+.liquid-ui .liquid-dock button { flex: 0 0 auto; flex-direction: row; gap: 10px; min-width: 120px; height: 54px; min-height: 54px;
+  border-radius: 40px; padding: 0 22px; font-size: 12px; letter-spacing: .01em; font-weight: 400;
+  color: #e6e7f7; background: linear-gradient(170deg,rgba(218,222,255,.12),rgba(72,76,110,.1));
+  border: 1px solid rgba(215,219,255,.35); box-shadow: inset 0 1px 1px rgba(255,255,255,.18),0 3px 6px -4px #000;
+  backdrop-filter: blur(6px); text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+.liquid-ui .liquid-dock button svg { width: 19px; height: 19px; stroke-width: 1.3; }
+.liquid-ui .liquid-dock button[data-optical="ready"] { background: transparent; border-color: transparent;
+  box-shadow: none; backdrop-filter: none; }
+.liquid-ui .liquid-dock button:is([aria-expanded="true"],[aria-pressed="true"]) { color: #fff; }
+.liquid-ui .liquid-dock button:is([aria-expanded="true"],[aria-pressed="true"]) span { text-decoration: none; }
+.liquid-ui .liquid-tool-rail { position: absolute; left: 38px; bottom: 176px; width: 228px; z-index: 30;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+.liquid-ui .liquid-rail-label { margin-bottom: 10px; }
+.liquid-ui .liquid-tool-rail button { display: flex; align-items: center; gap: 13px; padding: 12px 0;
+  min-height: 44px; border: 0; border-bottom: 1px solid rgba(180,182,215,.12); background: none;
+  color: #c1c2d3; font-size: 12px; cursor: pointer; text-align: left; }
+.liquid-ui .liquid-tool-rail button span { color: #73768f; font: 10px var(--font-mono); }
+.liquid-ui .liquid-tool-rail button b { margin-left: auto; color: #aeb2db; font-weight: 400; }
+.liquid-ui .liquid-tool-rail button:hover:not(:disabled) { color: #fff; border-color: #a6a9d3; }
+.liquid-ui .liquid-workspace-caption { position: absolute; top: 118px; left: 38px; max-width: 370px; pointer-events: none; }
+.liquid-ui .liquid-workspace-caption h1 { margin: 12px 0 10px; font-size: clamp(24px,2.8vw,38px); font-weight: 350; line-height: 1.15; letter-spacing: -.035em; }
+.liquid-ui .liquid-workspace-caption p { color: #a0a2b8; font-size: 12px; line-height: 1.6; }
+.liquid-ui .dataset-fidelity { top: auto; left: 38px; bottom: 110px; transform: none; width: auto;
+  max-width: calc(100% - 76px); padding: 0; background: none; background-image: none; backdrop-filter: none;
+  border: 0; box-shadow: none; color: #a1a3ba; font: 9px var(--font-mono); text-align: left; }
+.liquid-ui .fidelity-badge { border-radius: 5px; font: 9px var(--font-mono); padding: 4px 6px; margin-right: 8px; }
+.liquid-ui .hud-legend { bottom: 13px; padding: 4px 0; background: none; background-image: none;
+  backdrop-filter: none; border: 0; box-shadow: none; color: #a2a4ba; font-size: 10px; max-width: calc(100% - 24px); }
+.liquid-ui .hud-drawer-backdrop { background: rgba(5,6,13,.2); }
+.liquid-ui :is(.hud-left-panel,.hud-right-panel,.dossier,.orbit-info-panel,.report-modal,.acquisition-panel) {
+  background: linear-gradient(150deg,rgba(28,29,47,.94),rgba(14,16,28,.94));
+  border: 1px solid rgba(210,213,250,.17); box-shadow: 0 5px 14px -8px #000;
+  backdrop-filter: blur(20px); border-radius: 22px; animation: none;
+  color: #dcddeb; font-family: var(--font-display); }
+.liquid-ui :is(.hud-left-panel,.hud-right-panel) { top: 100px; bottom: 118px; width: 360px; max-height: none; padding: 24px; }
+.liquid-ui .hud-left-panel { left: 30px; } .liquid-ui .hud-right-panel { right: 30px; }
+.liquid-ui .hud-panel-header { font-size: 14px; letter-spacing: .035em; color: #eeeef8; padding-bottom: 16px; margin-bottom: 18px; }
+.liquid-ui :is(.hud-panel-header,.orbit-info-heading) button { min-width: 36px; min-height: 36px; border-radius: 50%;
+  background: rgba(191,195,237,.06); border: 1px solid rgba(213,216,250,.16); color: #dedfee; }
+.liquid-ui .hud-section-label { color: #a9abc7; font-size: 10px; font-weight: 500; letter-spacing: .11em; margin-bottom: 12px; }
+.liquid-ui :is(.hud-dataset-btn,.hud-action-btn,.hud-zone-card,.glass-segments button) {
+  background: rgba(197,201,243,.04); background-image: none; border: 1px solid rgba(201,205,248,.13);
+  border-radius: 12px; color: #d6d8eb; box-shadow: none; text-align: left; }
+.liquid-ui .hud-dataset-btn { padding: 14px 16px; }
+.liquid-ui .hud-dataset-name { color: #e0e1ee; font-size: 13px; letter-spacing: .01em; }
+.liquid-ui .hud-dataset-sub { color: #9194af; font-size: 11px; line-height: 1.5; }
+.liquid-ui :is(.hud-dataset-btn,.hud-action-btn,.hud-zone-card,.glass-segments button):hover:not(:disabled) {
+  background: rgba(197,201,243,.1); border-color: rgba(201,205,248,.33); }
+.liquid-ui :is(.hud-zone-card.active,.glass-segments button[aria-pressed="true"]) { background: rgba(174,178,230,.12); border-color: #8388b7; }
+.liquid-ui .hud-zone-card { min-height: 88px; padding: 14px; }
+.liquid-ui .zone-rank { color: #bfc3ed; } .liquid-ui .zone-class { font-size: 12px; }
+.liquid-ui .zone-score { color: #bfc3ed; } .liquid-ui .zone-evidence { color: #969bb6; font-size: 10px; }
+.liquid-ui .hud-status-message { color: #a5a8be; font-size: 12px; line-height: 1.65; background: rgba(194,198,235,.045);
+  padding: 12px; border: 1px solid rgba(205,207,247,.09); border-radius: 10px; letter-spacing: 0; }
+.liquid-ui .hud-status-message.error { color: #ffc4a6; border-color: rgba(255,178,145,.2); }
+.liquid-ui .assumption { color: #989db6; font-size: 11px; line-height: 1.7; }
+.liquid-ui .dataset-details dt { color: #8f93ad; font-size: 11px; }
+.liquid-ui .dataset-details dd { color: #d1d4e9; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.liquid-ui .intel-hist-bar { background: #929acc; } .liquid-ui .intel-hist-range { color: #9095b2; }
+.liquid-ui .workspace-field { color: #b8bdd5; letter-spacing: 0; font-size: 12px; }
+.liquid-ui .workspace-field input { accent-color: #b7bdf0; }
+.liquid-ui .workspace-field input[type="number"] { background: #151828; border-color: rgba(210,215,250,.2); }
+.liquid-ui :is(.source-window-details,.coordinate-reference) { color: #9da5c1; }
+.liquid-ui :is(.source-window-details summary,.coordinate-reference summary,.source-window-details b) { color: #c0c8ef; }
+.liquid-ui .liquid-empty-workspace { position: absolute; top: 25%; left: 50%; transform: translateX(-50%); width: min(520px,calc(100% - 48px)); pointer-events: auto; }
+.liquid-ui :is(.liquid-empty-workspace h1,.liquid-orbit-hero h2) { font-size: clamp(34px,4vw,55px); font-weight: 350; line-height: 1.09;
+  letter-spacing: -.045em; margin: 16px 0; color: #eeeef8; }
+.liquid-ui :is(.liquid-empty-workspace em,.liquid-orbit-hero em) { color: #a8abd1; font-style: normal; }
+.liquid-ui .liquid-empty-workspace p { color: #a0a4bc; font-size: 14px; line-height: 1.8; max-width: 420px; margin: 0 0 20px; }
+.liquid-ui .liquid-text-action { display: flex; gap: 32px; justify-content: space-between; background: none; color: #d6d9fa;
+  border: 0; border-bottom: 1px solid #7f85b6; padding: 12px 0; min-height: 44px; cursor: pointer; font-size: 13px; }
+.liquid-ui .liquid-text-action.muted { color: #989ebf; border-color: rgba(176,185,230,.2); margin-top: 5px; }
+.liquid-ui .liquid-empty-workspace small { display: block; margin-top: 28px; color: #7e85a6; font: 10px/1.8 var(--font-mono); }
+.liquid-ui:has(.liquid-empty-workspace) .terrain-viewport > .scene-status { display: none; }
+.liquid-ui .hud-overlay.panel-open :is(.liquid-workspace-caption,.liquid-tool-rail) { visibility: hidden; }
+.liquid-ui .terrain-focus-control { right: 36px; bottom: 112px; border-radius: 22px; background: rgba(23,26,42,.5);
+  border: 1px solid rgba(195,204,249,.18); box-shadow: none; color: #aab2d4; padding: 0 16px; font-size: 10px; }
+.liquid-ui .scene-status { background: rgba(17,20,33,.82); border: 1px solid rgba(200,206,248,.17); color: #c4c9e6;
+  box-shadow: none; font: 13px/1.7 var(--font-display); }
+.liquid-ui .placement-note { bottom: 124px; color: #d1d7f5; border-color: #878eb6; background: rgba(22,25,42,.88); box-shadow: none; }
+.liquid-ui .globe-overlay { padding: 0; }
+.liquid-ui .liquid-mobile-missions { display: none; }
+.liquid-ui :is(.globe-header,.globe-title,.globe-subtitle,.globe-sites) { animation: none; }
+.liquid-ui .orbit-tool-rail { left: 38px; right: auto; bottom: 140px; width: 440px; flex-direction: row; gap: 20px; }
+.liquid-ui .orbit-tool-rail .liquid-rail-label { display: none; }
+.liquid-ui .orbit-tool-rail button { flex: 1; font-size: 10px; gap: 6px; }
+.liquid-ui .orbit-overlay .globe-header { position: absolute; top: 30px; left: 38px; display: grid;
+  grid-template-columns: 38px auto; column-gap: 12px; row-gap: 3px; align-items: center; }
+.liquid-ui .globe-header .liquid-emblem { grid-row: 1 / 3; }
+.liquid-ui .orbit-overlay .globe-title { margin: 0; background: none; -webkit-text-fill-color: #eeeef8; color: #eeeef8;
+  font-size: 17px; font-weight: 600; letter-spacing: .12em; line-height: 1.4; }
+.liquid-ui .orbit-overlay .globe-subtitle { font-size: 9px; margin: 0; color: #9092ad; letter-spacing: .14em; }
+.liquid-ui .liquid-orbit-hero { position: absolute; top: 150px; left: 38px; max-width: 460px; }
+.liquid-ui .liquid-orbit-hero p { font-size: 13px; color: #9a9eb8; line-height: 1.8; }
+.liquid-ui .orbit-overlay .globe-body-controls { position: static; width: auto; margin-top: 24px; gap: 12px; }
+.liquid-ui .globe-region-size { color: #999fbc; letter-spacing: .07em; font-size: 10px; }
+.liquid-ui .globe-region-size input { min-height: 36px; width: 65px; border-radius: 10px; background: rgba(27,30,49,.55);
+  box-shadow: none; color: #d7dbf4; border-color: rgba(202,210,250,.22); }
+.liquid-ui .globe-imagery-option { color: #959fbc; font-size: 11px; }
+.liquid-ui .orbit-breadcrumb { margin-top: 10px; font: 9px var(--font-mono); letter-spacing: .07em; color: #9098b9; }
+.liquid-ui .orbit-breadcrumb button { min-height: 36px; border-radius: 22px; background: rgba(179,193,239,.04); font: 10px var(--font-display); border-color: rgba(202,210,250,.15); color: #b8c4ed; }
+.liquid-ui .orbit-overlay .globe-sites { display: flex; position: absolute; top: 150px; right: 38px; width: 224px; gap: 0; }
+.liquid-ui .globe-sites-label { color: #929ab6; font: 10px var(--font-mono); letter-spacing: .15em; margin-bottom: 14px; }
+.liquid-ui .globe-site-btn { min-height: 58px; padding: 13px 0; border: 0; border-bottom: 1px solid rgba(183,195,238,.14);
+  border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; color: #c4cee9; }
+.liquid-ui .globe-site-btn-name { font-size: 13px; font-weight: 400; letter-spacing: .02em; }
+.liquid-ui .globe-site-btn-coords { font-size: 10px; color: #7e8caa; }
+.liquid-ui .globe-site-btn:hover { background: none; border-color: #9baedb; }
+.liquid-ui .liquid-mission-note { font-size: 11px; color: #909bb9; line-height: 1.8; max-width: 210px; margin-top: 16px; }
+.liquid-ui .orbit-overlay .globe-footer { position: absolute; left: 38px; right: 38px; bottom: 14px; margin: 0; padding: 0;
+  animation: none; display: flex; flex-direction: row; gap: 20px; }
+.liquid-ui .globe-status { font: 9px var(--font-mono); color: #8b97b5; letter-spacing: .02em; }
+.liquid-ui .globe-source { font: 8px var(--font-mono); color: #7687a8; letter-spacing: .04em; }
+.liquid-ui .orbit-location { bottom: 126px; right: 38px; padding: 14px; background: rgba(25,29,47,.65); border-color: rgba(208,219,255,.18); box-shadow: none; font-size: 10px; }
+.liquid-ui .orbit-info-panel { right: 30px; bottom: 118px; padding: 24px; max-height: calc(100dvh - 230px); overflow-y: auto; z-index: 35; }
+.liquid-ui .orbit-info-panel p { color: #a2aecb; } .liquid-ui .orbit-info-panel a { color: #c1cff7; }
+.liquid-ui .dossier { right: 30px; top: 100px; bottom: 118px; width: 370px; max-height: none; overflow-y: auto; z-index: 45; }
+.liquid-ui .dossier-title { font-weight: 350; color: #e1e7f9; letter-spacing: -.03em; }
+.liquid-ui .dossier :is(p,li) { color: #a9b4d0; line-height: 1.75; }
+.liquid-ui .dossier-survey-btn { min-height: 48px; border-radius: 12px; background: rgba(156,174,229,.1); border-color: rgba(207,220,255,.3); color: #cedcfb; }
+.liquid-ui .acquisition-panel { left: 30px; bottom: 118px; padding: 22px; }
+.liquid-ui .report-modal { background: #151a2b; border-radius: 22px; max-width: 960px; }
+.liquid-ui .report-modal-backdrop { backdrop-filter: blur(8px); background: rgba(4,7,15,.6); }
+.liquid-ui .report-modal-header { border-color: rgba(205,217,255,.17); }
+.liquid-ui .report-modal-actions button { min-height: 40px; border-radius: 10px; color: #c8d6f7; background: rgba(162,184,234,.06); border-color: rgba(192,215,255,.15); }
+.liquid-ui .report-modal-body { color: #b7c7e5; font: 13px/1.8 var(--font-display); }
+.liquid-ui .report-modal-body :is(h2,h3,h4) { color: #e2ebfb; }
+.liquid-ui .report-table th { background: rgba(157,184,235,.08); color: #d1e1ff; }
+.liquid-ui .report-table :is(th,td) { border-color: rgba(177,199,239,.12); }
+
+@media (max-width: 1100px) {
+  .liquid-ui .liquid-orbit-hero { max-width: 325px; top: 130px; }
+  .liquid-ui .liquid-orbit-hero h2 { font-size: 41px; }
+  .liquid-ui .liquid-tool-rail { width: 196px; }
+  .liquid-ui .liquid-api-status { display: none; }
+  .liquid-ui .liquid-dock { gap: 12px; }
+}
+@media (max-width: 820px) {
+  .liquid-ui .hud-top { top: calc(18px + env(safe-area-inset-top)); left: 18px; right: 18px; display: flex; flex-wrap: wrap; gap: 12px; }
+  .liquid-ui .hud-top-left { min-height: 38px; } .liquid-ui .hud-top-right { flex-basis: 100%; order: 2; justify-content: center; }
+  .liquid-ui .hud-layer-selector { max-width: 100%; overflow: visible; padding: 3px; }
+  .liquid-ui .hud-layer-btn { font-size: 9px; padding: 0 10px; min-height: 38px; }
+  .liquid-ui .liquid-dock { bottom: calc(28px + env(safe-area-inset-bottom)); left: 12px; right: 12px; transform: none;
+    width: auto; max-width: none; gap: 8px; justify-content: center; }
+  .liquid-ui .liquid-dock button { flex: 1 1 0; min-width: 0; width: 0; padding: 0 6px; height: 50px; min-height: 50px;
+    gap: 3px; flex-direction: column; font-size: 9px; letter-spacing: 0; }
+  .liquid-ui .liquid-dock button svg { width: 16px; height: 16px; }
+  .liquid-ui .liquid-tool-rail { left: 18px; top: 119px; bottom: auto; width: calc(100% - 36px); flex-direction: row; gap: 10px; }
+  .liquid-ui .liquid-rail-label { display: none; }
+  .liquid-ui .liquid-tool-rail button { flex: 1; padding: 6px 0; font-size: 10px; gap: 4px; justify-content: center; }
+  .liquid-ui .liquid-tool-rail button :is(span,b) { display: none; }
+  .liquid-ui .liquid-workspace-caption { top: 179px; left: 18px; max-width: calc(100% - 36px); }
+  .liquid-ui .liquid-workspace-caption h1 { font-size: 23px; margin: 8px 0; }
+  .liquid-ui .liquid-workspace-caption p { font-size: 10px; }
+  .liquid-ui .dataset-fidelity { left: 18px; top: auto; bottom: 90px; width: calc(100% - 36px); max-width: none;
+    font-size: 8px; text-align: left; line-height: 1.6; }
+  .liquid-ui .physical-extent { display: inline; white-space: normal; }
+  .liquid-ui .hud-legend { bottom: 6px; font-size: 9px; width: calc(100% - 24px); gap: 5px; }
+  .liquid-ui :is(.hud-left-panel,.hud-right-panel,.dossier) { left: 12px; right: 12px; top: 126px; bottom: calc(94px + env(safe-area-inset-bottom));
+    width: auto; max-height: none; padding: 20px; }
+  .liquid-ui .terrain-focus-control { top: auto; bottom: 130px; right: 18px; font-size: 9px; }
+  .liquid-ui .liquid-empty-workspace { top: 28%; width: calc(100% - 42px); }
+  .liquid-ui .liquid-empty-workspace h1 { font-size: 36px; }
+  .liquid-ui .liquid-empty-workspace p { font-size: 12px; max-width: 350px; }
+  .liquid-ui .liquid-empty-workspace small { margin-top: 18px; font-size: 9px; }
+  .liquid-ui .orbit-overlay .globe-header { top: calc(20px + env(safe-area-inset-top)); left: 18px; }
+  .liquid-ui .liquid-orbit-hero { top: 104px; left: 18px; max-width: calc(100% - 36px); }
+  .liquid-ui .liquid-orbit-hero h2 { font-size: 33px; margin: 12px 0; }
+  .liquid-ui .liquid-orbit-hero p { font-size: 11px; line-height: 1.5; }
+  .liquid-ui .orbit-overlay .globe-body-controls { margin-top: 12px; gap: 8px; }
+  .liquid-ui .orbit-breadcrumb { margin-top: 6px; min-height: 36px; }
+  .liquid-ui .orbit-overlay .globe-header:has(.globe-imagery-option) .orbit-breadcrumb { margin-top: 6px; }
+  .liquid-ui .orbit-tool-rail { top: auto; bottom: 94px; left: 18px; right: 18px; width: auto; gap: 10px; }
+  .liquid-ui .liquid-mobile-missions { display: block; width: 180px; margin-top: 6px; pointer-events: auto; position: relative; }
+  .liquid-ui .liquid-mobile-missions summary { min-height: 36px; display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; color: #c2c9e8; cursor: pointer; border-bottom: 1px solid rgba(184,197,239,.3); }
+  .liquid-ui .liquid-mobile-missions > div { position: absolute; top: 40px; left: 0; width: 240px; background: #191d30;
+    border: 1px solid rgba(190,205,245,.25); border-radius: 14px; padding: 10px; box-shadow: 0 5px 12px -7px #000; z-index: 40; }
+  .liquid-ui .liquid-mobile-missions button { display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+    min-height: 48px; width: 100%; padding: 9px; color: #dae4fb; border: 0; background: transparent; cursor: pointer; }
+  .liquid-ui .liquid-mobile-missions button span { font-size: 9px; color: #91a4c4; }
+  .liquid-ui .orbit-overlay .globe-sites { top: auto; bottom: 165px; right: 18px; width: 155px; }
+  .liquid-ui .globe-site-btn { min-height: 44px; padding: 8px 0; }
+  .liquid-ui .globe-site-btn-name { font-size: 11px; } .liquid-ui .globe-site-btn-coords { font-size: 9px; }
+  .liquid-ui .liquid-mission-note { display: none; }
+  .liquid-ui .orbit-overlay .globe-footer { left: 18px; right: 18px; bottom: 6px; margin: 0; flex-direction: column; gap: 3px; }
+  .liquid-ui .globe-status { font-size: 7px; } .liquid-ui .globe-source { font-size: 7px; }
+  .liquid-ui .orbit-location { bottom: 140px; left: 18px; right: 18px; max-width: none; font-size: 9px; }
+  .liquid-ui .orbit-info-panel { left: 12px; right: 12px; width: auto; bottom: calc(94px + env(safe-area-inset-bottom)); max-height: 64dvh; padding: 20px; }
+  .liquid-ui .acquisition-panel { left: 12px; right: 12px; bottom: calc(94px + env(safe-area-inset-bottom)); width: auto;
+    max-height: calc(100dvh - 210px); overflow-y: auto; }
+  .liquid-ui .placement-note { bottom: 116px; font-size: 11px; }
+  .liquid-ui .report-modal { width: calc(100% - 20px); }
+  .liquid-ui .report-modal-actions { flex-wrap: wrap; gap: 6px; }
+}
+@media (max-height: 620px) and (min-width: 821px) {
+  .liquid-ui .liquid-orbit-hero { top: 100px; } .liquid-ui .liquid-orbit-hero h2 { font-size: 36px; }
+  .liquid-ui .liquid-tool-rail { bottom: 142px; } .liquid-ui .liquid-workspace-caption { top: 90px; }
+  .liquid-ui .liquid-dock { bottom: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-ui *, .liquid-ui *::before, .liquid-ui *::after { scroll-behavior: auto; transition: none; }
+}
+
+/* One interaction response across native buttons and their optical surfaces. */
+.liquid-ui .water-button {
+  --water-pressure: 0;
+  translate: 0 calc(var(--water-pressure) * 3px);
+  scale: calc(1 - var(--water-pressure) * .025);
+  position: relative;
+  isolation: isolate;
+}
+.liquid-ui .water-button[data-water-state="down"] { border-color: rgba(235,242,255,.7); }
+.liquid-ui .water-button::after {
+  content: ''; position: absolute; inset: 1px; border-radius: inherit;
+  border: 1px solid rgba(226,240,255,.7); opacity: 0; pointer-events: none;
+}
+.liquid-ui .water-button[data-water-wave="release"]::after { animation: water-release .55s ease-out; }
+@keyframes water-release {
+  0% { opacity: .7; transform: scale(.95); }
+  100% { opacity: 0; transform: scale(1.09,1.15); }
+}
+.liquid-ui .hud-layer-selector {
+  padding: 0; gap: 8px; background: none; border: 0; box-shadow: none; backdrop-filter: none; overflow: visible;
+}
+.liquid-ui :is(.hud-layer-btn,.terrain-focus-control,.liquid-tool-rail button) {
+  color: #f0f2ff; background: linear-gradient(170deg,rgba(222,237,255,.13),rgba(29,40,64,.16));
+  border: 1px solid rgba(225,238,255,.4); border-radius: 40px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.22),0 3px 6px -4px #000;
+  backdrop-filter: blur(6px); text-shadow: 0 1px 3px rgba(5,10,20,.9);
+}
+.liquid-ui .hud-layer-btn { min-height: 44px; padding: 0 13px; font-size: 11px; }
+.liquid-ui .hud-layer-btn.active { color: #fff; background-color: transparent; border-color: rgba(235,243,255,.65);
+  text-decoration: none; box-shadow: none; }
+.liquid-ui .hud-layer-btn.active::after { display: block; }
+.liquid-ui .hud-layer-btn:hover:not(:disabled) { background-color: rgba(229,241,255,.08); }
+.liquid-ui .liquid-tool-rail { gap: 12px; width: 228px; }
+.liquid-ui .liquid-tool-rail button { min-height: 50px; padding: 0 16px; font-size: 13px; }
+.liquid-ui .liquid-tool-rail button :is(span,b) { color: #d1dcf4; }
+.liquid-ui .terrain-view-controls { position: absolute; bottom: 112px; right: 36px; display: flex; gap: 10px; z-index: 12; }
+.liquid-ui .terrain-view-controls .terrain-focus-control { position: relative; bottom: auto; right: auto; min-height: 46px; padding: 0 20px; font-size: 12px; }
+.liquid-ui .simulation-root:has(.hud-overlay.panel-open) .terrain-view-controls,
+.liquid-ui:has(.hud-overlay.panel-open) .terrain-view-controls { visibility: hidden; }
+.liquid-ui .terrain-focus-control[aria-pressed="true"] { text-decoration: none; }
+.liquid-ui [data-liquid-control][data-optical="ready"] {
+  background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none;
+}
+.liquid-ui [data-liquid-control][data-optical="ready"]:hover { background: transparent; }
+.liquid-ui .liquid-dock button { font-size: 14px; }
+.liquid-ui :is(.hud-branding,.liquid-workspace-caption,.liquid-rail-label) { text-shadow: 0 1px 4px rgba(0,10,25,.9); }
+.liquid-ui :is(.hud-version,.liquid-eyebrow,.liquid-rail-label,.liquid-workspace-caption p) { color: #e1e8f8; }
+.liquid-ui .liquid-workspace-caption {
+  padding: 14px 18px; margin-left: -18px; border-radius: 18px;
+  background: linear-gradient(100deg,rgba(13,25,39,.3),rgba(13,25,39,0));
+}
+.liquid-ui .liquid-workspace-caption p { font-size: 14px; }
+.liquid-ui .dataset-fidelity { font-size: 11px; color: #edf2ff; text-shadow: 0 1px 3px #151d2b;
+  background: rgba(14,24,38,.28); border-radius: 9px; padding: 7px 10px; max-width: calc(100% - 350px); }
+.liquid-ui .hud-legend { color: #edf2ff; font-size: 12px; text-shadow: 0 1px 3px #151d2b; }
+.liquid-ui .dataset-details { font-size: 12px; }
+.liquid-ui .hud-status-message { font-size: 12px; line-height: 1.6; }
+
+.terrain-annotations { position: absolute; inset: 0; pointer-events: none; z-index: 8; }
+.terrain-annotation-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; }
+.terrain-annotation-leaders line { stroke: rgba(235,245,255,.65); stroke-width: 1;
+  filter: drop-shadow(0 1px 1px #17243a); }
+.terrain-annotation-leaders circle { fill: #e2f5ff; stroke: #243b56; stroke-width: 1.5; }
+.liquid-ui .terrain-annotation { position: absolute; width: 32px; height: 32px;
+  display: grid; place-items: center; padding: 0; pointer-events: auto;
+  border: 1px solid rgba(223,242,255,.7); border-radius: 50%;
+  background: rgba(14,28,43,.58); color: #f0f6ff; text-align: center;
+  box-shadow: 0 2px 5px rgba(8,20,33,.22); cursor: pointer; overflow: visible; }
+.liquid-ui .terrain-annotation[hidden] { display: none; }
+.terrain-annotation-number { font: 11px var(--font-mono); color: #ecf8ff; }
+.terrain-annotation-copy { display: grid; gap: 4px; width: max-content; max-width: 226px;
+  position: absolute; top: var(--tooltip-top,37px); left: var(--tooltip-left,-12px); right: var(--tooltip-right,auto); text-align: left;
+  padding: 9px 12px; border: 1px solid rgba(223,242,255,.35); border-radius: 10px;
+  background: rgba(12,25,39,.92); color: #f0f6ff; pointer-events: none;
+  opacity: 0; visibility: hidden; transform: none; box-shadow: 0 3px 8px rgba(0,0,0,.15); }
+.terrain-annotation-copy strong { font-size: 12px; font-weight: 500; line-height: 1.25; text-transform: capitalize; }
+.terrain-annotation-copy small { color: #ccd9eb; font-size: 11px; }
+.liquid-ui .terrain-annotation:is(:hover,:focus-visible) { background: rgba(25,43,65,.85); border-color: #d6efff; z-index: 3; }
+.terrain-annotation:is(:hover,:focus-visible):not([data-tooltip-dismissed]) .terrain-annotation-copy { opacity: 1; visibility: visible; }
+.liquid-ui .terrain-annotation[aria-pressed="true"] { border-color: #a7e3ff; }
+.terrain-annotation-hint { display: none; }
+@media (max-width: 1100px) and (min-width: 821px) {
+  .liquid-ui .hud-top { left: 24px; right: 24px; gap: 10px; }
+  .liquid-ui .hud-layer-btn { padding: 0 10px; }
+  .liquid-ui .hud-layer-selector { gap: 5px; }
+}
+@media (max-width: 820px) {
+  .liquid-ui .terrain-annotation { width: 44px; height: 44px; border: 0; box-shadow: none; background: none; }
+  .liquid-ui .terrain-annotation-number { display: grid; place-items: center; width: 26px; height: 26px;
+    border: 1px solid rgba(223,242,255,.7); border-radius: 50%; background: rgba(14,28,43,.65); }
+  .liquid-ui .terrain-annotation:is(:hover,:focus-visible) { background: none; }
+  .liquid-ui .hud-layer-selector { gap: 5px; }
+  .liquid-ui .hud-layer-btn { min-height: 40px; padding: 0 6px; font-size: 10px; }
+  .liquid-ui .liquid-tool-rail { gap: 6px; width: auto; }
+  .liquid-ui .liquid-tool-rail button { min-height: 44px; padding: 0 9px; font-size: 11px; }
+  .liquid-ui .liquid-dock button { font-size: 11px; padding: 0 8px; }
+  .liquid-ui .liquid-workspace-caption { top: 177px; padding: 8px 12px; margin-left: -12px; }
+  .liquid-ui .liquid-workspace-caption h1 { font-size: 22px; margin: 7px 0; }
+  .liquid-ui .liquid-workspace-caption p { font-size: 12px; }
+  .liquid-ui .dataset-fidelity { font-size: 10px; padding: 5px 8px; max-width: calc(100% - 36px); }
+  .liquid-ui .hud-legend { font-size: 11px; }
+  .liquid-ui .terrain-view-controls { bottom: 130px; right: 18px; gap: 8px; }
+  .liquid-ui .terrain-view-controls .terrain-focus-control { font-size: 11px; min-height: 44px; padding: 0 14px; }
+  .liquid-ui .terrain-annotation-hint { display: block; position: absolute; bottom: 182px; right: 18px;
+    color: #dfeafa; font-size: 11px; text-shadow: 0 1px 2px #142237; pointer-events: none; }
+  .liquid-ui:has(.hud-overlay.panel-open) .terrain-annotation-hint { visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .liquid-ui .water-button[data-water-wave]::after { animation: none; }
+}
+
+/* Workspace sheets share the water controls' cyan light and transparency. */
+.liquid-ui :is(.hud-left-panel,.hud-right-panel,.dossier,.orbit-info-panel,.acquisition-panel) {
+  background: linear-gradient(145deg,rgba(26,55,70,.5),rgba(8,20,32,.66));
+  border: 1px solid rgba(207,245,255,.4); backdrop-filter: blur(2px) saturate(115%);
+  box-shadow: inset 1px 1px 1px rgba(242,255,255,.3),6px 9px 18px -8px rgba(0,7,16,.4);
+  color: #edf7fa;
+}
+.liquid-ui :is(.hud-left-panel,.hud-right-panel) { padding: 24px 28px;background:linear-gradient(145deg,rgba(26,55,70,.25),rgba(8,20,32,.38));backdrop-filter:none; }
+.liquid-ui :is(.hud-dataset-btn,.hud-action-btn,.glass-segments button,.hud-zone-card) {
+  border-radius: 24px; min-height: 40px; padding: 10px 16px;
+  background: linear-gradient(155deg,rgba(223,248,255,.12),rgba(96,154,175,.06));
+  border: 1px solid rgba(214,241,249,.25); color: #eaf7fc;
+  box-shadow: inset 1px 1px 1px rgba(255,255,255,.22),4px 6px 9px -7px rgba(0,5,15,.6);
+}
+.liquid-ui :is(.hud-panel-header,.hud-dataset-name,.workspace-field,.route-summary) { color:#edf8fc; }
+.liquid-ui :is(.assumption,.hud-dataset-sub,.dataset-details dt) { color:#b8cdd6; }
+.liquid-ui .hud-section-label { color:#a4d7e0; }
+.liquid-ui :is(.hud-dataset-btn,.hud-action-btn,.glass-segments button,.hud-zone-card)[data-optical="ready"] {
+  background:transparent;box-shadow:none;border-color:transparent;
+}
+.liquid-ui .workspace-field { display:grid;gap:9px;margin-bottom:15px;line-height:1.45; }
+.liquid-ui .workspace-field input { width:100%;min-height:28px;accent-color:#abe9ef; }
+.liquid-ui .workspace-field input[type="number"] { color:#eefaff;border-radius:12px;padding:8px 10px;background:rgba(7,21,34,.4); }
+.liquid-ui .hud-section a { color:#b8f0f3;font-size:12px; }
+.liquid-ui progress { width:100%;accent-color:#9ce7ec;height:9px; }
+.liquid-ui .scenario-label { font-size:10px;padding:3px 7px;background:rgba(11,26,37,.66);border:1px solid rgba(180,227,238,.35);border-radius:12px; }
+.liquid-ui .orbit-model-note { display:block;max-width:300px;font-size:10px;line-height:1.7;color:#a3c3d4; }
+.liquid-ui .hud-drawer-backdrop { background:rgba(3,11,22,.08); }
+.liquid-ui .workspace-field select { width:100%;padding:9px 12px;border:1px solid rgba(205,240,248,.35);border-radius:12px;background:#112a39;color:#edf8fc; }
+.liquid-ui .rover-view-switch { display:flex;gap:8px; }
+.liquid-ui .terrain-view-controls { flex-wrap:wrap;max-width:calc(100% - 36px);justify-content:flex-end; }
+.liquid-ui .terrain-view-controls .rover-view-switch button { min-height:40px;padding:0 14px;font-size:11px; }
+.liquid-ui.rover-view :is(.liquid-workspace-caption,.liquid-tool-rail,.terrain-annotations,.terrain-annotation-hint) { display:none; }
+.liquid-ui.rover-view .dataset-fidelity { max-width:48%; }
+@media (max-width:820px) {
+  .liquid-ui.rover-view .dataset-fidelity { max-width:calc(100% - 36px);bottom:189px; }
+  .liquid-ui .terrain-view-controls .rover-view-switch button { padding:0 10px; }
+}
+.orbit-motion-controls { position:absolute;top:30px;right:32px;display:flex;align-items:center;gap:14px;pointer-events:auto;max-width:55%;flex-wrap:wrap;color:#d8efff; }
+.orbit-motion-controls > button { min-height:44px;padding:0 18px;border-radius:25px;color:inherit;border:1px solid #bfd7ea50;background:#36587424;cursor:pointer; }
+.orbit-motion-controls label { display:flex;align-items:center;gap:8px;font:10px var(--font-mono);letter-spacing:.08em; }
+.orbit-motion-controls select { color:#e7f6ff;background:#19354a8c;border:1px solid #b2daef55;border-radius:14px;padding:9px;font-size:12px; }
+.orbit-motion-controls > span { flex-basis:100%;text-align:right;font:10px var(--font-mono);color:#b8d7e9; }
+.gpu-readout { font:12px var(--font-mono);overflow-wrap:anywhere;color:#d9f2ff;line-height:1.6; }
+.route-coordinate-readout { font:12px var(--font-mono);line-height:1.7;color:#d9f2ff; }
+.lroc-source-card { padding:14px 0;border-top:1px solid #a9d9ee25; }
+.lroc-source-card a { display:inline-block;padding:8px 8px 0 0;font-size:12px; }
+.liquid-ui .dataset-fidelity { bottom:112px;max-width:calc(100% - 480px);white-space:normal; }
+.liquid-ui.rover-view .dataset-fidelity { max-width:calc(100% - 580px); }
+@media(max-width:820px) { .orbit-motion-controls {top:90px;right:20px;max-width:calc(100% - 40px);gap:8px;} .orbit-motion-controls > span {display:none;} }
+@media(max-width:820px) { .liquid-ui .dataset-fidelity,.liquid-ui.rover-view .dataset-fidelity {bottom:210px;max-width:calc(100% - 36px);} }
+/* Shared refractive controls: native inputs use the same optical surface. */
+.liquid-ui :is(.globe-region-size,.orbit-motion-controls label) { background:transparent;box-shadow:none;border:0; }
+.liquid-ui :is(select,input[type=number]) { min-height:42px;border-radius:20px;padding:10px 14px;color:#eaf6ff;background:#57768818;border:1px solid #d4ecf04a; }
+.liquid-ui :is(select,input[type=number])[data-optical=ready] { background:transparent!important;border-color:transparent!important;box-shadow:none!important; }
+.liquid-ui select option { background:#142332;color:#eaf6ff; }
+.liquid-ui .globe-region-size input { width:82px; }
+.liquid-ui .globe-body-controls { flex-wrap:wrap;gap:12px; }
+.liquid-ui .orbit-breadcrumb { display:flex;align-items:center;gap:14px;min-height:44px; }
+.liquid-ui .orbit-breadcrumb span { display:block; }
+.liquid-ui .orbit-tool-rail { display:none; }
+.liquid-ui .liquid-orbit-hero { top:130px;max-width:380px; }
+.liquid-ui .liquid-orbit-hero h2 { font-size:clamp(28px,3.1vw,42px);margin:16px 0; }
+.liquid-ui .orbit-context-controls { max-width:calc(100% - 40px);gap:12px; }
+.liquid-ui .orbit-context-controls button { min-width:106px;padding:0 20px; }
+.liquid-ui .orbit-panel-open :is(.liquid-orbit-hero,.globe-sites,.orbit-location), .liquid-ui.performance-open :is(.globe-sites,.liquid-workspace-caption) { visibility:hidden;pointer-events:none; }
+.liquid-ui .gateway-inspection :is(.liquid-orbit-hero,.globe-sites,.orbit-location) { display:none; }
+.gateway-caption { position:absolute;top:155px;left:38px;max-width:300px;pointer-events:none;color:#dcecf4; }
+.gateway-caption h2 { font-size:32px;font-weight:350;line-height:1.2; }
+.gateway-caption p { font-size:12px;line-height:1.7; }
+.asset-status { display:block;background:#162738b0;border:1px solid #c2e7ef40;border-radius:14px;padding:12px;font:12px system-ui;min-width:160px; }
+.liquid-ui .performance-launch { position:absolute;right:20px;bottom:12px;z-index:52;border:1px solid #c1e4f340;border-radius:22px;min-height:36px;padding:0 15px;background:#b3d7e412;color:#eaf6ff; }
+.performance-panel { position:absolute;right:24px;top:116px;bottom:126px;width:min(370px,calc(100% - 48px));overflow:auto;z-index:55;border:1px solid #c9eafa40;border-radius:24px;background:linear-gradient(145deg,#182d408c,#1726386e);backdrop-filter:blur(24px);padding:22px;color:#e4f4fc;box-sizing:border-box; }
+.performance-panel .hud-section-label { margin-top:18px; }
+.evidence-decision { display:block;font-size:13px;line-height:1.5;color:#f4d9a3;padding-top:10px; }
+.mission-evidence p { line-height:1.6;font-size:13px; }
+.liquid-ui .hud-overlay.panel-open .liquid-empty-workspace { display:none; }
+@media(max-height:740px) { .liquid-ui .liquid-orbit-hero {top:120px;max-width:310px;} .liquid-ui .liquid-orbit-hero h2 {font-size:30px;} .liquid-ui .liquid-orbit-hero p {line-height:1.5;} .gateway-caption {top:135px;max-width:235px;} }
+@media(max-width:820px) { .liquid-ui .liquid-orbit-hero {top:166px;left:18px;} .liquid-ui .orbit-context-controls {gap:8px;flex-wrap:wrap;} .liquid-ui .orbit-context-controls button {min-height:44px;min-width:94px;padding:0 12px;} .gateway-caption {top:175px;left:18px;max-width:210px;} .gateway-caption h2 {font-size:24px;} }
+
+.liquid-ui:has(.hud-overlay.panel-open) .empty-scene-status {display:none;}
+
+/* Reserve separate space for navigation, provenance and performance. */
+@media(min-width:821px) {
+  .liquid-ui .liquid-dock {bottom:calc(56px + env(safe-area-inset-bottom));}
+  .liquid-ui .dataset-fidelity {bottom:130px;}
+  .liquid-ui :is(.hud-left-panel,.hud-right-panel,.dossier,.orbit-info-panel,.acquisition-panel) {bottom:136px;}
+  .liquid-ui .orbit-overlay .globe-footer {right:170px;}
+  .liquid-ui .hud-legend {max-width:calc(100% - 320px);}
+}
+@media(max-width:820px) {
+  .liquid-ui .performance-launch {top:18px;bottom:auto;right:18px;min-height:40px;font-size:11px;}
+  .performance-panel {top:146px;bottom:94px;}
+}
+
+/* Follow controls have their own band above the primary workspace dock. */
+.liquid-ui .terrain-view-controls {bottom:calc(152px + env(safe-area-inset-bottom));column-gap:16px;row-gap:16px;max-width:calc(100% - 64px);}
+.liquid-ui .follow-look-controls {display:flex;align-items:center;gap:12px;flex-basis:100%;justify-content:flex-end;}
+.liquid-ui .follow-look-controls .terrain-focus-control {min-height:34px;padding:0 13px;font-size:10px;}
+.liquid-ui .camera-gesture-hint {font-size:11px;max-width:145px;line-height:1.5;color:#dae5ec;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"] {appearance:none;-webkit-appearance:none;display:inline-block;flex:none;width:42px!important;height:25px!important;min-height:0!important;margin:0 0 0 12px!important;padding:0!important;border:1px solid #d3edff60;border-radius:20px;background:linear-gradient(150deg,#bfe4ee24,#08121c60);box-shadow:inset 0 1px 1px #ffffff55;cursor:pointer;position:relative;vertical-align:middle;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]::after {content:"";position:absolute;top:4px;left:4px;width:15px;height:15px;border-radius:50%;background:#ddeaf7aa;box-shadow:1px 2px 2px #0006;transition:transform 160ms,background 160ms;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]:checked::after {transform:translateX(17px);background:#bde6ed;}
+.liquid-ui :is(.workspace-field,.globe-imagery-option) input[type="checkbox"]:focus-visible {outline:2px solid #c5f1fa;outline-offset:4px;}
+.liquid-ui .bhuvan-mark {stroke:none;fill:none;filter:none;}
+.liquid-ui .bhuvan-aperture {fill:#e4f1f6;stroke:none;}
+.liquid-ui .bhuvan-aperture-offset {fill:#a8cedb;}
+.liquid-ui .bhuvan-depth-seam {fill:none;stroke:#aecfdd;stroke-width:1;}
+.liquid-ui .entity-purpose {font-size:13px;line-height:1.6;border-left:2px solid #a9d4df80;padding-left:12px;}
+.liquid-ui .map-observations {margin:20px 0 10px;font-size:12px;}
+.liquid-ui .rover-speed-editor .glass-segments {margin-top:12px;gap:12px;flex-wrap:wrap;}
+.liquid-ui .layer-purpose {flex-basis:100%;font-size:11px;line-height:1.5;color:#d6e9f2;}
+.liquid-ui .hud-legend {flex-wrap:wrap;row-gap:3px;}
+@media(max-width:820px) {
+ .liquid-ui .terrain-view-controls {right:18px;bottom:calc(148px + env(safe-area-inset-bottom));max-width:calc(100% - 36px);gap:12px;}
+ .liquid-ui .follow-look-controls {gap:12px;} .liquid-ui .camera-gesture-hint {max-width:125px;font-size:10px;}
+}
+
+.liquid-ui .orbital-capture {position:absolute;right:30px;bottom:152px;z-index:15;min-height:40px;padding:0 16px;font-size:11px;}
+.liquid-ui .orbital-mission-telemetry {position:absolute;right:30px;top:140px;width:235px;z-index:12;background:#14233065;border:1px solid #daebff30;backdrop-filter:blur(16px);border-radius:18px;padding:16px;font-size:12px;line-height:1.5;color:#e3f1f7;}
+.liquid-ui .orbital-mission-telemetry p {margin:7px 0;} .liquid-ui .orbital-mission-telemetry small {color:#bdcbd3;}
+.liquid-ui .rover-view-switch {gap:14px;}
+@media(max-width:820px) {.liquid-ui .orbital-mission-telemetry {top:174px;right:18px;width:190px;} .liquid-ui .orbital-capture {right:18px;bottom:150px;}}
+
+.capture-notice {position:absolute;top:112px;right:30px;z-index:80;max-width:340px;border:1px solid #d3e5f53a;border-radius:16px;background:#112330b0;backdrop-filter:blur(14px);padding:14px 18px;color:#e2edf4;font-size:12px;line-height:1.6;pointer-events:none;}
+
+.liquid-ui .terrain-view-controls:has(.rover-view-switch) {width:min(740px,calc(100% - 64px));}
+.liquid-ui .terrain-view-controls button[hidden] {display:none!important;}
+@media(max-width:820px){.liquid-ui .terrain-view-controls:has(.rover-view-switch){width:calc(100% - 36px);}.liquid-ui .follow-look-controls .terrain-focus-control {min-height:40px;}}
+
+.liquid-ui .sampling-action {display:block;margin-top:5px;color:#e3cba7;font:11px/1.4 system-ui;letter-spacing:0;}
+.liquid-ui:has(.rover-view-switch) .dataset-fidelity {max-width:310px;}
+
+/* Drawer contents own their space. Hide scene annotations while reading. */
+.liquid-ui:has(.hud-overlay.panel-open) :is(.dataset-fidelity,.hud-legend,.terrain-annotation-hint,.scenario-label,.liquid-tool-rail,.liquid-workspace-caption) {visibility:hidden;}
+.liquid-ui .hud-overlay.panel-open .hud-drawer-backdrop {z-index:20;background:rgba(3,9,16,.25);backdrop-filter:blur(2px);}
+.liquid-ui .hud-overlay.panel-open :is(.hud-left-panel,.hud-right-panel) {z-index:40;top:112px;bottom:142px;max-height:none;padding:22px;background:linear-gradient(145deg,rgba(18,35,44,.86),rgba(5,14,23,.91));backdrop-filter:blur(20px);overflow-y:auto;}
+.liquid-ui .hud-overlay.panel-open :is(.hud-top,.liquid-dock) {z-index:45;}
+.liquid-ui .rover-speed-editor .glass-segments {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;}
+.liquid-ui .rover-speed-editor .glass-segments button {display:flex;align-items:center;justify-content:center;width:100%;min-width:0;min-height:44px;padding:0 6px;white-space:nowrap;line-height:1.2;text-align:center;}
+.liquid-ui .loaded-terrain-summary {display:flex;flex-direction:column;gap:8px;margin-bottom:18px;padding:14px;border:1px solid #cae4ee30;border-radius:14px;font-size:12px;}
+.liquid-ui .loaded-terrain-summary b {font-size:10px;letter-spacing:.12em;color:#bbd9e3;}
+.liquid-ui .bhuvan-mark.liquid-emblem {width:140px;height:28px;border:0;flex:none;}
+.liquid-ui .hud-branding {grid-template-columns:auto;column-gap:0;}
+.liquid-ui .hud-version {grid-column:1;}
+.liquid-ui.rover-view .dataset-fidelity {top:120px;bottom:auto;left:38px;max-width:300px;}
+.liquid-ui .dataset-fidelity .physical-extent {display:block;white-space:normal;overflow-wrap:anywhere;}
+.liquid-ui .terrain-view-controls:has(.rover-view-switch) {width:min(830px,calc(100% - 64px));}
+@media(min-width:821px) {
+ .liquid-ui:not(.rover-view) .dataset-fidelity {top:112px;bottom:auto;left:auto;right:38px;max-width:300px;}
+}
+@media(max-width:820px) {
+ .liquid-ui .hud-overlay.panel-open :is(.hud-left-panel,.hud-right-panel) {top:140px;bottom:100px;left:18px;right:18px;width:auto;max-height:none;padding:18px;}
+ .liquid-ui.rover-view .dataset-fidelity {top:128px;bottom:auto;left:18px;width:300px;max-width:calc(100% - 36px);text-align:left;}
+ .liquid-ui .terrain-view-controls:has(.rover-view-switch) {width:calc(100% - 36px);}
+ .liquid-ui .bhuvan-mark.liquid-emblem {width:112px;height:24px;}
+}

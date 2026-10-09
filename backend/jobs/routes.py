@@ -82,8 +82,9 @@ def _terminal_status(job_id: str) -> JobStatus | None:
 
 def _submit(job_id: str, spec: dict) -> JobAccepted:
     status_url = f"/api/v2/jobs/{job_id}"
-    if _terminal_status(job_id) is not None:
-        return JobAccepted(job_id=job_id, state="SUCCESS", status_url=status_url, cached=True)
+    terminal = _terminal_status(job_id)
+    if terminal is not None:
+        return JobAccepted(job_id=job_id, state=terminal.state, status_url=status_url, cached=True)
 
     if EAGER:
         try:

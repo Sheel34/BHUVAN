@@ -29,9 +29,9 @@ Thumbs.db
 
 # Generated
 outputs/
+outputs-terrain-tiles/
 cache/
 tmp/
-report/
 report.zip
 data_cache/
 workspace.db
@@ -48,3 +48,50 @@ job_id.txt
 output/
 ~$*
 .vercel
+
+.claude/
+desktop/.profile/
+desktop/gpu-verification.json
+desktop/gpu-startup-verification.json
+desktop/gpu-preference-before.json
+
+# Browser inspection captures (local verification evidence)
+/.playwright-cli/
+
+# Local archive exports
+/BHUVAN-local.zip
+/Terrain Mission Rehearsal Simulator Thesis - Overleaf.zip
+/thesis-overleaf.zip
+
+# Thesis build products; .tex and embedded assets/ PDFs remain visible
+/thesis-overleaf*/**/*.aux
+/thesis-overleaf*/**/*.toc
+/thesis-overleaf*/**/*.lof
+/thesis-overleaf*/**/*.lot
+/thesis-overleaf*/**/*.loa
+/thesis-overleaf*/**/*.fls
+/thesis-overleaf*/**/*.fdb_latexmk
+/thesis-overleaf*/**/*.synctex.gz
+/thesis-overleaf*/**/*.xdv
+/Terrain Mission Rehearsal Simulator Thesis.pdf
+/thesis-overleaf/main.pdf
+/thesis-overleaf/Terrain Mission Rehearsal Simulator Thesis.pdf
+/thesis-overleaf-editable/main.pdf
+/thesis-overleaf-editable/edit-chapter.pdf
+
+# The legacy report contains authored source, so ignore only rebuild products
+/report/**/*.aux
+/report/**/*.toc
+/report/**/*.lof
+/report/**/*.lot
+/report/**/*.loa
+/report/**/*.fls
+/report/**/*.fdb_latexmk
+/report/**/*.synctex.gz
+/report/**/*.xdv
+/report/main.pdf
+
+# SQLite sidecars beside the already-ignored workspace.db
+workspace.db-journal
+workspace.db-wal
+workspace.db-shm

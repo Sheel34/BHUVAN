@@ -23,6 +23,7 @@ from pipeline.schemas import (
     TerrainMeta,
 )
 from pipeline.terrain_analysis import analyze_terrain
+from pipeline.provenance import describe_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +171,17 @@ def build_payload(
     world_scale_m = metadata.get("world_scale_m", 200.0)
     height_scale_m = metadata.get("height_scale_m", 30.0)
     size = int(elevation_grid.shape[0])
+    configured_limit=int(os.environ.get("BHUVAN_MAX_SAMPLES","4097"))
+    if size>configured_limit:
+        raise ValueError(f"This host accepts at most {configured_limit} analysis samples per side. Use a smaller patch or wide-area overview; upload analysis is not silently downsampled.")
     cell_size_m = metadata.get("resolution_m_per_px", world_scale_m / (size - 1))
-
-    elevation_m = elevation_grid * height_scale_m
+    provenance, model = describe_dataset(metadata, size, cell_size_m)
+    if not provenance["metric"]:
+        # Relative geometry only. Legacy *_m fields are retained for API
+        # compatibility; provenance explicitly states that they are not metres.
+        world_scale_m, height_scale_m = 2.0, 1.0
+        cell_size_m = world_scale_m / (size - 1)
+    elevation_m = elevation_grid.astype("float64") * height_scale_m + (metadata.get("height_min_m", 0.0) if provenance["metric"] else 0.0)
 
     notify("Computing hazard layers", 30)
     # analyze_terrain expects metres — passing the normalised [0,1] grid
@@ -182,7 +191,7 @@ def build_payload(
     notify("Ranking landing zones", 60)
     landing_zones: list[LandingZone] = rank_landing_zones(
         elevation_m, layers, scale_m=world_scale_m
-    )
+    ) if provenance["metric"] else []
 
     notify("Deriving terrain intelligence", 75)
     intelligence = build_intelligence(elevation_m, layers, scale_m=world_scale_m)
@@ -199,8 +208,14 @@ def build_payload(
         resolution_m_per_px=cell_size_m,
         safe_area_pct=round((safe_cells / total_cells) * 100.0, 1),
         crs=metadata.get("crs", "local-normalised"),
-        disclaimer=metadata.get("disclaimer"),
+        disclaimer=(
+            f"{provenance['status']}. " + (metadata.get("disclaimer") or "Source uncertainty/vertical datum unspecified.")
+            + " Analysis uses unvalidated heuristic hazard thresholds; illumination is an orientation proxy, not terrain-occlusion shadowing."
+            + " Zone intervals describe assumed hazard-index noise sensitivity, not measured source uncertainty or validated safety."
+        ),
         color_url=metadata.get("color_url"),
+        provenance=provenance,
+        analysis_model=model,
     )
 
     terrain_grid = TerrainGrid(
@@ -241,10 +256,23 @@ def build_payload(
 
     return payload
 
+
+def _native_product(path, sample_id, source, body, name):
+    if not path.exists():
+        raise FileNotFoundError(str(path))
+    try:
+        grid, metadata = ingest_geotiff(str(path))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=ErrorDetail(code="INGEST_FAILED", message=str(exc)).model_dump()) from exc
+    if metadata.get("body") not in (body, "unknown"):
+        raise HTTPException(status_code=422, detail=ErrorDetail(code="BODY_REFERENCE_MISMATCH", message=f"Product body {body} conflicts with source CRS body {metadata['body']}.").model_dump())
+    metadata.update(source=source, body=body, terrain_name=name, dataset_id=sample_id)
+    return grid, metadata
+
 app = FastAPI(
-    title="BHUVAN Terrain Intelligence API",
+    title="BHUVAN Planetary Terrain Systems API",
     version=API_VERSION,
-    description="Backend-first terrain risk assessment and landing decision support.",
+    description="Research prototype for derived terrain analysis with explicit source fidelity and limitations.",
 )
 
 app.mount("/artifacts", StaticFiles(directory=OUTPUT_DIR), name="artifacts")
@@ -259,6 +287,10 @@ app.mount("/moon-assets", StaticFiles(directory=str(MOON_TEXTURE_DIR)), name="mo
 from jobs.routes import router as jobs_router  # noqa: E402 — needs OUTPUT_DIR defined
 
 app.include_router(jobs_router)
+from data.terrain_routes import router as terrain_router
+app.include_router(terrain_router)
+from data.terrain_tiles import router as terrain_tiles_router
+app.include_router(terrain_tiles_router)
 
 # Dev defaults plus any production origins supplied via env
 # (BHUVAN_CORS_ORIGINS="https://app.example.com,https://www.example.com").
@@ -537,9 +569,9 @@ def analyze_sample(request: AnalyzeRequest):
     if sample_info["source"] == "hirise-dtm":
         # Load real HiRISE DTM data
         try:
-            from data.hirise_downloader import load_dtm_as_numpy
+            from data.hirise_downloader import get_cache_path
             hirise_id = sample_info["hirise_id"]
-            elevation, metadata = load_dtm_as_numpy(hirise_id, target_size=512)
+            elevation, metadata = _native_product(get_cache_path(hirise_id), hirise_id, "hirise-dtm", "mars", sample_info["label"])
         except FileNotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -562,9 +594,9 @@ def analyze_sample(request: AnalyzeRequest):
     elif sample_info["source"] == "lola-dem":
         # Load real lunar LOLA DEM data
         try:
-            from data.lroc_downloader import load_dem_as_numpy
+            from data.lroc_downloader import get_dem_cache_path
             lola_id = sample_info["lola_id"]
-            elevation, metadata = load_dem_as_numpy(lola_id, target_size=512)
+            elevation, metadata = _native_product(get_dem_cache_path(lola_id), lola_id, "lola-dem", "moon", sample_info["label"])
         except FileNotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -624,6 +656,70 @@ def dem_fetch(req: DemRequest):
     return build_payload(elevation, metadata)
 
 
+class EdgeDepthRequest(BaseModel):
+    grid: list[list[float]]               # normalised [0,1] elevation from on-device NN
+    name: Optional[str] = None
+    device: Optional[str] = None          # 'webgpu' | 'wasm' — where inference ran
+    model: Optional[str] = None
+    infer_ms: Optional[int] = None
+    source_width: Optional[int] = None
+    source_height: Optional[int] = None
+    world_scale_m: float = 320.0
+    height_scale_m: float = 70.0
+    color_url: Optional[str] = None
+
+
+@app.post("/api/v1/analyze-edge", response_model=AnalysisPayload)
+def analyze_edge(req: EdgeDepthRequest):
+    """Take a depth field produced by the ON-DEVICE neural net (Depth-Anything,
+    run in the browser via WebGPU) and run it through the full terrain pipeline.
+
+    The perception step (image -> depth) happens at the edge; this endpoint only
+    does the classical analytics (slope/roughness/curvature/hazard, zones,
+    intelligence) on the depth the client already inferred."""
+    import numpy as np
+
+    grid = np.asarray(req.grid, dtype=np.float32)
+    if grid.ndim != 2 or grid.shape[0] != grid.shape[1] or not 16 <= grid.shape[0] <= 1025 or not np.isfinite(grid).all():
+        raise HTTPException(
+            status_code=422,
+            detail=ErrorDetail(
+                code="BAD_DEPTH_GRID",
+                message="Expected a square [N x N] normalised depth grid, N >= 16.",
+            ).model_dump(),
+        )
+    # renormalise defensively to [0,1]
+    g_min = float(grid.min())
+    g_rng = max(1e-6, float(grid.max()) - g_min)
+    grid = (grid - g_min) / g_rng
+
+    dev = (req.device or "device").lower()
+    metadata = {
+        "terrain_name": req.name or "Edge-AI Depth Field",
+        "source": "edge-depth-anything-v2",
+        "dataset_id": req.name or "relative-depth-field",
+        "original_width": req.source_width or grid.shape[1],
+        "original_height": req.source_height or grid.shape[0],
+        "world_scale_m": float(req.world_scale_m),
+        "height_scale_m": float(req.height_scale_m),
+        "crs": "monocular-depth (relative relief)",
+        "disclaimer": (
+            f"Elevation inferred ON-DEVICE by Depth-Anything V2 (neural monocular depth) "
+            f"on {dev}"
+            + (f" in {req.infer_ms} ms" if req.infer_ms else "")
+            + ". Relative relief from a single image — not survey-grade."
+        ),
+    }
+    if req.color_url:
+        from pathlib import Path
+        import re
+        if not re.fullmatch(r'/artifacts/imagery/[a-f0-9]{24}\.png',req.color_url) or not (Path(OUTPUT_DIR)/'imagery'/Path(req.color_url).name).is_file():
+            raise HTTPException(status_code=422,detail='Original colour image artifact is missing.')
+        metadata['color_url']=req.color_url
+        metadata['surface_imagery']={'source':'original uploaded image','dataset_id':req.name or 'uploaded image','registration':'same normalized image rectangle; no geographic registration'}
+    return build_payload(grid, metadata)
+
+
 @app.post("/api/v1/tercom/run")
 def tercom_run(req: TercomRequest):
     """Run the TERCOM guidance simulation on a real DEM for this lat/lon.
@@ -661,7 +757,18 @@ def tercom_run(req: TercomRequest):
 
 @app.post("/api/v1/analyze-upload", response_model=AnalysisPayload)
 async def analyze_upload(file: Annotated[UploadFile, File(...)]):
-    content = await file.read()
+    filename=(file.filename or '').lower()
+    if filename.endswith(('.tif','.tiff','.geotiff')) or (file.content_type or '').lower() in ('image/tiff','image/x-tiff'):
+        path=await save_dem_upload(file)
+        try:
+            elevation,metadata=ingest_geotiff(path,target_size=1025)
+            metadata['dataset_id']=file.filename or 'uploaded-geotiff'
+            return build_payload(elevation,metadata)
+        except ValueError as exc:
+            raise HTTPException(status_code=422,detail=ErrorDetail(code='INGEST_FAILED',message=str(exc)).model_dump()) from exc
+        finally:
+            os.remove(path)
+    content = await file.read(50*1024*1024+1)
     if len(content) < 64:
         raise HTTPException(
             status_code=400,
@@ -672,28 +779,6 @@ async def analyze_upload(file: Annotated[UploadFile, File(...)]):
             status_code=413,
             detail=ErrorDetail(code="FILE_TOO_LARGE", message="Maximum upload is 50 MB.").model_dump(),
         )
-
-    ct = (file.content_type or "").lower()
-    filename = (file.filename or "").lower()
-    is_tiff = ct in {"image/tiff", "image/x-tiff"} or filename.endswith((".tif", ".tiff"))
-
-    # ── GeoTIFF: the only path that can load a REAL area — it carries CRS +
-    #    bounds, so the surface is georeferenced to true coordinates. ──
-    if is_tiff:
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            try:
-                elevation, metadata = ingest_geotiff(tmp_path)
-            finally:
-                os.remove(tmp_path)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail=ErrorDetail(code="INGEST_FAILED", message=str(exc)).model_dump(),
-            ) from exc
-        return build_payload(elevation, metadata)
 
     # ── Plain image: accept ANY decodable image (don't gate on content-type,
     #    which wrongly rejects valid terrain). Classify it; reject only clear
@@ -718,6 +803,10 @@ async def analyze_upload(file: Annotated[UploadFile, File(...)]):
         )
 
     elevation, metadata = ingest_image_bytes(content)
+    metadata["dataset_id"] = file.filename or "uploaded-image"
+    from pipeline.surface_imagery import save_rgb_image
+    metadata['color_url']=save_rgb_image(content,OUTPUT_DIR)
+    metadata['surface_imagery']={'source':'original uploaded image','dataset_id':file.filename or 'image','registration':'same normalized image rectangle; uncalibrated heights'}
 
     # Label + honest provenance by detected body.
     if verdict["is_moon"]:
@@ -735,6 +824,52 @@ async def analyze_upload(file: Annotated[UploadFile, File(...)]):
         metadata["terrain_name"] = "Terrain Upload — image"
 
     return build_payload(elevation, metadata)
+
+
+async def save_dem_upload(file):
+    """Stream large source files to disk; analysis still reads a bounded window."""
+    total=0
+    with tempfile.NamedTemporaryFile(delete=False,suffix='.tif') as target:
+        path=target.name
+        try:
+            while chunk:=await file.read(1024*1024):
+                total+=len(chunk)
+                if total>2*1024**3: raise HTTPException(status_code=413,detail='Maximum raster upload is 2 GB. Crop larger products first.')
+                target.write(chunk)
+            if total<64: raise HTTPException(status_code=400,detail='Raster appears empty.')
+        except Exception:
+            target.close();os.remove(path);raise
+    return path
+
+
+@app.post('/api/v1/analyze-pair',response_model=AnalysisPayload)
+async def analyze_pair(dem: Annotated[UploadFile,File(...)],orthophoto: Annotated[UploadFile,File(...)]):
+    paths=[]
+    try:
+        dem_path=await save_dem_upload(dem);paths.append(dem_path)
+        ortho_path=await save_dem_upload(orthophoto);paths.append(ortho_path)
+        elevation,metadata=ingest_geotiff(dem_path,target_size=1025)
+        metadata['dataset_id']=dem.filename or 'uploaded-geotiff'
+        from pipeline.surface_imagery import align_raster_image
+        url,imagery=align_raster_image(ortho_path,metadata,OUTPUT_DIR)
+        imagery['dataset_id']=orthophoto.filename or 'uploaded-orthophoto'
+        metadata.update(color_url=url,surface_imagery=imagery)
+        return build_payload(elevation,metadata)
+    except ValueError as exc:
+        raise HTTPException(status_code=422,detail=ErrorDetail(code='PAIR_INGEST_FAILED',message=str(exc)).model_dump()) from exc
+    finally:
+        for path in paths: os.remove(path)
+
+
+@app.post('/api/v1/surface-image')
+async def upload_surface_image(file: Annotated[UploadFile,File(...)]):
+    content=await file.read(50*1024*1024+1)
+    if len(content)>50*1024*1024: raise HTTPException(status_code=413,detail='Maximum colour image is 50 MB.')
+    try:
+        from pipeline.surface_imagery import save_rgb_image
+        return {'color_url':save_rgb_image(content,OUTPUT_DIR)}
+    except (ValueError,OSError) as exc:
+        raise HTTPException(status_code=422,detail='Image cannot be decoded.') from exc
 
 
 @app.get("/health")

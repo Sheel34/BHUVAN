@@ -1,4 +1,3 @@
-import React from 'react';
 import { MISSION_TYPE_STYLE } from '../lib/lunarMissions';
 
 const STATUS_LABEL = {
@@ -66,7 +65,7 @@ export default function MissionDossier({ mission, onClose, onSurvey }) {
       )}
 
       <button className="dossier-survey-btn" onClick={() => onSurvey(mission)}>
-        EXPLORE THIS SITE'S SURFACE →
+        OPEN TERRAIN AT THIS SITE →
       </button>
     </aside>
   );

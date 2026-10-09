@@ -1,0 +1,38 @@
+# Optional demonstration blueprint; the existing paid blueprint is unchanged.
+# Supply the actual HTTPS frontend/API origins in the Render dashboard.
+services:
+  - type: web
+    name: bhuvan-demo-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: BHUVAN_CORS_ORIGINS
+        sync: false
+      - key: BHUVAN_MAX_SAMPLES
+        value: "513"
+      - key: BHUVAN_ACQUISITION_SLOTS
+        value: "1"
+      - key: BHUVAN_MAX_INPUT_MIB
+        value: "32"
+      - key: GDAL_CACHEMAX
+        value: "32"
+      - key: OPENBLAS_NUM_THREADS
+        value: "1"
+      - key: OMP_NUM_THREADS
+        value: "1"
+  - type: web
+    name: bhuvan-demo
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

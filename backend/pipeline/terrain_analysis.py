@@ -20,7 +20,10 @@ def _slope_degrees(elevation_m: np.ndarray, cell_size_m: float) -> np.ndarray:
     return np.degrees(slope_rad)
 
 def _roughness_std(elevation_m: np.ndarray, cell_size_m: float, physical_kernel_m: float = 6.0) -> np.ndarray:
-    kernel = max(3, int(physical_kernel_m / cell_size_m))
+    # Subtract an offset before squaring: large absolute elevations otherwise
+    # cause catastrophic cancellation in float32 local variance.
+    elevation_m = elevation_m.astype(np.float64) - float(elevation_m.min())
+    kernel = min(max(3, int(physical_kernel_m / cell_size_m)), min(elevation_m.shape))
     if kernel % 2 == 0:
         kernel += 1
     mean = cv2.blur(elevation_m, (kernel, kernel))
@@ -29,7 +32,9 @@ def _roughness_std(elevation_m: np.ndarray, cell_size_m: float, physical_kernel_
     return np.sqrt(variance)
 
 def _curvature_laplacian(elevation_m: np.ndarray, cell_size_m: float) -> np.ndarray:
-    lap = cv2.Laplacian(elevation_m.astype(np.float32), cv2.CV_32F, ksize=3)
+    # The ksize=3 OpenCV kernel has a different scale. Use the standard
+    # five-point Laplacian; this is absolute bending, not signed curvature.
+    lap = cv2.Laplacian(elevation_m.astype(np.float32), cv2.CV_32F, ksize=1)
     return np.abs(lap) / (cell_size_m**2)
 
 def _shadow_proxy(
@@ -66,12 +71,16 @@ def analyze_terrain(
     sun_elevation_deg: float = 45.0,
 ) -> dict:
     """
-    Computes terrain mechanics layers from a normalised elevation grid.
+    Computes heuristic layers from elevations and spacing in matching units.
 
     Returns a dict keyed by layer name. Each value holds the normalised
     0-1 float32 grid under "data", plus the physical range it maps to.
     """
-    elevation_m = elevation.astype(np.float32)
+    if elevation.ndim != 2 or min(elevation.shape) < 2 or not np.isfinite(elevation).all():
+        raise ValueError("Elevation grid must be finite and at least 2 x 2.")
+    if not np.isfinite(cell_size_m) or cell_size_m <= 0:
+        raise ValueError("Cell spacing must be positive and finite.")
+    elevation_m = (elevation.astype(np.float64) - float(elevation.min())).astype(np.float32)
 
     # 1. Mathematical Analysis
     slope_deg = _slope_degrees(elevation_m, cell_size_m)

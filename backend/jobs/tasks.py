@@ -46,9 +46,11 @@ def _resolve_elevation(spec: dict):
         sample_id = spec["sample"]
         info = backend_main.SAMPLE_REGISTRY[sample_id]
         if info["source"] == "hirise-dtm":
-            from data.hirise_downloader import load_dtm_as_numpy
-
-            return load_dtm_as_numpy(info["hirise_id"], target_size=512)
+            from data.hirise_downloader import get_cache_path
+            return backend_main._native_product(get_cache_path(info["hirise_id"]), info["hirise_id"], "hirise-dtm", "mars", info["label"])
+        if info["source"] == "lola-dem":
+            from data.lroc_downloader import get_dem_cache_path
+            return backend_main._native_product(get_dem_cache_path(info["lola_id"]), info["lola_id"], "lola-dem", "moon", info["label"])
         from pipeline.ingest import generate_sample
 
         return generate_sample(sample_id)
@@ -60,9 +62,13 @@ def _resolve_elevation(spec: dict):
         ct = (spec.get("content_type") or "").lower()
         name = (spec.get("filename") or "").lower()
         if ct in {"image/tiff", "image/x-tiff"} or name.endswith((".tif", ".tiff")):
-            return ingest_geotiff(path)
+            grid, metadata = ingest_geotiff(path)
+            metadata["dataset_id"] = spec.get("filename", "uploaded-geotiff")
+            return grid, metadata
         with open(path, "rb") as fh:
-            return ingest_image_bytes(fh.read())
+            grid, metadata = ingest_image_bytes(fh.read())
+        metadata["dataset_id"] = spec.get("filename", "uploaded-image")
+        return grid, metadata
 
     raise ValueError(f"Unknown job kind: {spec.get('kind')!r}")
 

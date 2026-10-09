@@ -4,7 +4,7 @@ from io import BytesIO
 
 import cv2
 import numpy as np
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 # rasterio is imported lazily inside ingest_geotiff(): it links native
 # GDAL/expat libs that may be absent on minimal cloud images. Keeping the
@@ -113,7 +113,7 @@ def ingest_image_bytes(
     height_scale_m: float = DEFAULT_HEIGHT_SCALE_M,
 ) -> tuple[np.ndarray, dict]:
     try:
-        image = Image.open(BytesIO(content))
+        image = ImageOps.exif_transpose(Image.open(BytesIO(content)))
     except UnidentifiedImageError as exc:
         raise ValueError(f"Cannot decode image: {exc}") from exc
 
@@ -138,96 +138,67 @@ def ingest_image_bytes(
     )
 
 
-def ingest_geotiff(
-    path: str,
-    target_size: int = 512,
-) -> tuple[np.ndarray, dict]:
-    import rasterio  # type: ignore
-    from rasterio.enums import Resampling  # type: ignore
+def ingest_geotiff(path: str, target_size: int = 512) -> tuple[np.ndarray, dict]:
+    """Read a bounded native-resolution window, never stretch or resample a DEM.
+
+    Geographic/rotated/anisotropic rasters need a body-aware transform that this
+    square-patch client does not implement. Reject them rather than fake metres.
+    """
+    import rasterio
+    from rasterio.windows import Window
     from rasterio.errors import RasterioIOError
 
     try:
         with rasterio.open(path) as src:
-            # Validate CRS
-            if src.crs is None:
-                raise ValueError("GeoTIFF has no CRS defined. Please provide a georeferenced DEM.")
-            
-            crs_str = str(src.crs)
-            is_projected = src.crs.is_projected
-            
-            # Extract bounds and transform
-            bounds = src.bounds
-            native_res_m = abs(src.transform.a)
-            orig_width = src.width
-            orig_height = src.height
-            
-            # Validate resolution is reasonable
-            if native_res_m <= 0 or native_res_m > 1000:
-                raise ValueError(f"Invalid resolution: {native_res_m} m/pixel. Expected 0-1000 m/pixel.")
-            
-            # Calculate resampled resolution
-            resampled_res_m = native_res_m * (orig_width / target_size)
-            world_scale_m = resampled_res_m * target_size
-            
-            # Read and resample data
-            data = src.read(
-                1,
-                out_shape=(target_size, target_size),
-                resampling=Resampling.bilinear,
-            ).astype(np.float32)
-            
-            nodata = src.nodata
-            
-            # Extract additional metadata
-            metadata_extra = {
-                "original_width": orig_width,
-                "original_height": orig_height,
-                "bounds_left": bounds.left,
-                "bounds_right": bounds.right,
-                "bounds_bottom": bounds.bottom,
-                "bounds_top": bounds.top,
-                "is_projected_crs": is_projected,
-            }
-            
-    except RasterioIOError as e:
-        raise ValueError(f"Failed to read GeoTIFF: {e}") from e
-
-    grid = data
-    
-    # Handle nodata values
-    if nodata is not None:
-        grid = np.where(grid == nodata, np.nan, grid)
-    
-    # Validate data range
-    valid_pixels = ~np.isnan(grid)
-    if valid_pixels.sum() < 0.1 * grid.size:
-        raise ValueError("GeoTIFF has insufficient valid data (<10% of pixels).")
-    
-    # Inpaint missing data
-    nan_mask = np.isnan(grid).astype(np.uint8)
-    if nan_mask.any():
-        grid_filled = np.where(np.isnan(grid), 0.0, grid)
-        grid = cv2.inpaint(grid_filled, nan_mask, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
-    
-    # Calculate height statistics
-    height_min_m = float(np.nanmin(grid))
-    height_max_m = float(np.nanmax(grid))
-    height_range_m = height_max_m - height_min_m
-    
-    if height_range_m < 0.1:
-        raise ValueError(f"Terrain has insufficient height variation: {height_range_m:.2f}m")
-    
-    normalised = _normalize_grid(grid)
-    
-    return normalised, _make_metadata(
-        "GeoTIFF DEM",
-        "geotiff",
-        target_size,
-        world_scale_m=world_scale_m,
-        height_scale_m=height_range_m,
-        crs=crs_str,
-        native_resolution_m_per_px=native_res_m,
-        height_min_m=height_min_m,
-        height_max_m=height_max_m,
-        **metadata_extra,
-    )
+            if src.crs is None or not src.crs.is_projected:
+                raise ValueError("Metric analysis requires a projected body-appropriate CRS. Geographic degrees are not metres; automatic reprojection is not implemented.")
+            t = src.transform
+            factor = src.crs.linear_units_factor[1]
+            cell = abs(t.a) * factor
+            if t.b != 0 or t.d != 0 or not np.isclose(abs(t.a), abs(t.e)) or not np.isfinite(cell) or cell <= 0:
+                raise ValueError("Rotated or unequal-spacing grids require explicit reprojection before square-patch analysis.")
+            n = min(target_size, src.width, src.height)
+            if n < 2:
+                raise ValueError("DEM window must contain at least 2 x 2 samples.")
+            window = Window((src.width-n)//2, (src.height-n)//2, n, n)
+            band = src.read(1, window=window, masked=True)
+            if np.ma.getmaskarray(band).any() or not np.isfinite(band).all():
+                raise ValueError("Selected DEM window contains missing elevations. No-data interpolation is not performed silently; supply a valid window.")
+            declared_unit = src.units[0]
+            unit = (declared_unit or "m").lower()
+            if unit not in ("m", "metre", "meter", "metres", "meters"):
+                raise ValueError(f"Elevation unit {unit!r} requires explicit conversion to metres.")
+            grid = np.asarray(band, dtype=np.float64) * src.scales[0] + src.offsets[0]
+            transform = src.window_transform(window)
+            lo, hi = float(grid.min()), float(grid.max())
+            crs = str(src.crs)
+            wkt = src.crs.to_wkt().lower()
+            body = "moon" if "moon" in wkt or "lunar" in wkt else "mars" if "mars" in wkt else "earth" if "wgs" in wkt or "nad" in wkt else "unknown"
+            reference_params=src.crs.to_dict()
+            radius=reference_params.get('R')
+            if radius is not None and abs(float(radius)-1737400)<1:
+                body='moon'
+            reference_model={"body":body,"kind":"source CRS reference model","crs_wkt":src.crs.to_wkt()}
+            if radius is not None:
+                reference_model.update(radius_m=float(radius),kind="source reference sphere")
+            elif 'a' in reference_params:
+                reference_model.update(a_m=float(reference_params['a']),b_m=float(reference_params.get('b',reference_params['a'])))
+            metadata = _make_metadata(
+                "GeoTIFF DEM", "geotiff", n, world_scale_m=cell*(n-1),
+                height_scale_m=hi-lo, crs=crs, native_resolution_m_per_px=cell,
+                original_width=src.width, original_height=src.height,
+                height_min_m=lo, height_max_m=hi, body=body,
+                dataset_id="uploaded-geotiff",
+                window=[int(window.col_off), int(window.row_off), n, n],
+                bounds=list(src.window_bounds(window)), affine=list(transform)[:6],
+                vertical_reference="source CRS/band; datum unspecified; " + ("band unit " + unit if declared_unit else "band unit unspecified, metres assumed; verify source"),
+                resampled=False,
+                reference_model=reference_model,
+                horizontal_unit=src.crs.linear_units,
+                disclaimer="Native-resolution central square window; exterior samples remain in the source file. Body/reference inferred only from CRS; verify before use.",
+            )
+    except RasterioIOError as exc:
+        raise ValueError(f"Failed to read GeoTIFF: {exc}") from exc
+    # Use float64 so large absolute offsets do not contaminate local relief.
+    relative = (grid-lo)/(hi-lo) if hi > lo else np.zeros_like(grid)
+    return relative, metadata

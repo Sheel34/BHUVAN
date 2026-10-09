@@ -16,11 +16,11 @@ from scipy import ndimage
 # Surface classes by slope/curvature/roughness heuristics
 CLASS_DEFS = [
     ("plains", "Smooth plains", "Low slope, low roughness — prime traverse corridors"),
-    ("slopes", "Moderate slopes", "Walkable gradients; watch local hazards"),
-    ("steep", "Steep terrain", "Slopes beyond safe traverse limits"),
-    ("ridges", "Ridges and rims", "Convex crests — high visibility, exposed"),
-    ("depressions", "Craters and basins", "Concave floors — potential science targets, comms shadow"),
-    ("rough", "Broken ground", "High roughness — boulder fields, ejecta"),
+    ("slopes", "Moderate slopes", "Intermediate normalized slope; no vehicle feasibility evaluation"),
+    ("steep", "Steep terrain", "High normalized slope; heuristic category"),
+    ("ridges", "High bending", "Large unsigned Laplacian; convexity is unknown"),
+    ("depressions", "Low bending slopes", "Low unsigned Laplacian; concavity is unknown"),
+    ("rough", "Broken ground", "High local elevation variation; material and boulders are not identified"),
 ]
 
 
@@ -109,8 +109,8 @@ def segment_regions(
                 "coverage_pct": round(pct, 1),
                 "area_km2": round(region_cells * cell_area_m2 / 1e6, 3),
                 # Centroid in world coordinates (terrain centered at origin)
-                "x": round((cx / (size - 1) - 0.5) * scale_m, 1),
-                "z": round((cy / (size - 1) - 0.5) * scale_m, 1),
+                "x": round((cy / (size - 1) - 0.5) * scale_m, 1),
+                "z": round((cx / (size - 1) - 0.5) * scale_m, 1),
             })
 
     regions.sort(key=lambda r: r["coverage_pct"], reverse=True)
@@ -158,9 +158,9 @@ def find_interest_regions(
         local_slope = float(slope[i, j])
         local_elev = float(elevation_m[i, j])
         if local_curv > 0.62:
-            kind = "ridge crest / crater rim"
+            kind = "high bending candidate"
         elif local_curv < 0.38:
-            kind = "crater floor / basin"
+            kind = "low bending candidate"
         elif local_slope > 0.4:
             kind = "scarp face"
         else:
@@ -170,8 +170,8 @@ def find_interest_regions(
             "id": f"poi-{len(picked) + 1}",
             "kind": kind,
             "score": round(peak, 3),
-            "x": round((j / (size - 1) - 0.5) * scale_m, 1),
-            "z": round((i / (size - 1) - 0.5) * scale_m, 1),
+            "x": round((i / (size - 1) - 0.5) * scale_m, 1),
+            "z": round((j / (size - 1) - 0.5) * scale_m, 1),
             "elevation_m": round(local_elev, 1),
             "evidence": {
                 "curvature": round(local_curv, 2),

@@ -8,24 +8,41 @@ import { useFrame, useThree } from '@react-three/fiber';
 
 const UPDATE_INTERVAL_MS = 500;
 
-export default function PerfStats({ enabled }) {
+export default function PerfStats({ enabled, onStats }) {
   const { gl } = useThree();
-  const acc = useRef({ frames: 0, time: 0, last: 0 });
+  const acc = useRef({ frames: 0, time: 0, last: 0, lastFrame: 0 });
 
   useEffect(() => {
     const el = document.getElementById('perf-stats');
     if (el) el.style.display = enabled ? 'block' : 'none';
   }, [enabled]);
 
+  useEffect(()=>{const now=performance.now();acc.current={frames:0,time:0,last:now,lastFrame:now};},[enabled]);
   useFrame((_, dt) => {
+    const a=acc.current,now=performance.now();
+    // Report wall-clock frame intervals, not the simulation's clamped delta.
+    const frameSeconds=a.lastFrame>0?(now-a.lastFrame)/1000:dt;
+    a.lastFrame=now;
+    if(import.meta.env.DEV) {
+      const stats=globalThis.__BHUVAN_STREAMING_STATS__;
+      if(stats) {
+        stats.measuredFrames=(stats.measuredFrames||0)+1;stats.measuredTimeMs=(stats.measuredTimeMs||0)+frameSeconds*1000;
+        stats.averageFrameMs=stats.measuredTimeMs/stats.measuredFrames;
+        stats.averageFps=1000/stats.averageFrameMs;
+        stats.browserHeapBytes=performance.memory?.usedJSHeapSize ?? null;
+        stats.geometryCount=gl.info.memory.geometries;stats.renderedTriangles=gl.info.render.triangles;
+      }
+    }
     if (!enabled) return;
-    const a = acc.current;
     a.frames += 1;
-    a.time += dt;
+    a.time += frameSeconds;
 
-    const now = performance.now();
     if (now - a.last < UPDATE_INTERVAL_MS) return;
     a.last = now;
+    onStats?.({ fps: a.frames / a.time, frameMs: a.time / a.frames * 1000,
+      drawCalls: gl.info.render.calls, renderedTriangles: gl.info.render.triangles,
+      geometryCount: gl.info.memory.geometries,
+      browserHeapBytes: performance.memory?.usedJSHeapSize ?? null });
 
     const el = document.getElementById('perf-stats');
     if (el) {

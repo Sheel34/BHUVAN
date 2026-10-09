@@ -2,7 +2,7 @@
 
 CPU/RAM via psutil; NVIDIA GPU via NVML (the same interface nvidia-smi
 uses), so utilization, VRAM, temperature, and power draw are the actual
-driver-reported numbers, not estimates. The frontend SystemMonitor
+driver-reported numbers, not estimates. The frontend PerformancePanel
 panel polls /api/v1/system/stats with this data.
 """
 
@@ -96,6 +96,7 @@ def get_live_stats() -> dict:
     vm = psutil.virtual_memory()
     stats = {
         "ts": time.time(),
+        "process_rss_mib": round(psutil.Process().memory_info().rss/2**20,1),
         "cpu_percent": psutil.cpu_percent(interval=None),
         "cpu_per_core": psutil.cpu_percent(interval=None, percpu=True),
         "ram_used_gb": round(vm.used / 2**30, 2),

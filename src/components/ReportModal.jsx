@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useRef } from 'react';
 
 function downloadMarkdown(report) {
   const blob = new Blob([report.markdown], { type: 'text/markdown' });
@@ -69,16 +69,34 @@ function renderMarkdown(md) {
 }
 
 export default function ReportModal({ report, onClose }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    if (!report) return undefined;
+    const previous = document.activeElement === document.body
+      ? document.querySelector(`[data-report-kind="${report.kind}"]`) : document.activeElement;
+    dialog.current?.focus();
+    return () => { if (previous?.isConnected) previous.focus(); };
+  }, [report]);
   if (!report) return null;
+  const handleKeys = event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+    if (event.key !== 'Tab') return;
+    const buttons = [...dialog.current.querySelectorAll('button,a[href],input,[tabindex="0"]')];
+    const first = buttons[0], last = buttons.at(-1);
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) {
+      event.preventDefault(); last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+  };
   return (
     <div className="report-modal-backdrop" onClick={onClose}>
-      <div className="report-modal" onClick={(e) => e.stopPropagation()}>
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={`${report.kind || 'Terrain'} report`}
+        tabIndex={-1} className="report-modal" onKeyDown={handleKeys} onClick={(e) => e.stopPropagation()}>
         <header className="report-modal-header">
           <span className="report-modal-kind">{report.kind?.toUpperCase()} REPORT</span>
           <div className="report-modal-actions">
             <button onClick={() => downloadMarkdown(report)}>⬇ EXPORT .MD</button>
             <button onClick={() => window.print()}>⎙ PRINT / PDF</button>
-            <button onClick={onClose}>✕</button>
+            <button aria-label="Close report" onClick={onClose}>✕</button>
           </div>
         </header>
         <div className="report-modal-body">{renderMarkdown(report.markdown)}</div>

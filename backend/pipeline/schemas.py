@@ -9,13 +9,16 @@ class TerrainMeta(BaseModel):
     terrain_name: str
     source: str
     grid_size: int
-    world_scale_m: float = Field(description="Side length of terrain square in metres")
-    height_scale_m: float = Field(description="Vertical scale factor in metres")
-    resolution_m_per_px: float = Field(description="Ground sampling distance in metres/pixel")
+    world_scale_m: float = Field(description="Legacy key: side extent, metres only when provenance.metric is true")
+    height_scale_m: float = Field(description="Legacy key: vertical scale in provenance.elevation_unit")
+    resolution_m_per_px: float = Field(description="Legacy key: sample spacing, metres only when provenance.metric is true")
     safe_area_pct: float
     crs: str = "local-normalised"
     disclaimer: str | None = None
     color_url: str | None = None
+    # Additive provenance: legacy scalar keys remain for existing clients.
+    provenance: dict = Field(default_factory=dict)
+    analysis_model: dict = Field(default_factory=dict)
 
 class TerrainGrid(BaseModel):
     size: int
@@ -23,7 +26,7 @@ class TerrainGrid(BaseModel):
     height_scale: float
     min_h: float
     max_h: float
-    data: list[float] = Field(description="Row-major flattened elevation grid in metres")
+    data: list[float] = Field(description="Row-major scientific elevations in provenance.elevation_unit; absolute offset retained for calibrated data")
 
 class AnalysisLayers(BaseModel):
     slope: list[float]
@@ -51,13 +54,13 @@ class ZoneComponents(BaseModel):
     shadow_pct: float
 
 class ZoneUncertainty(BaseModel):
-    score_ci_lower: float = Field(description="Lower 95% confidence bound for score")
-    score_ci_upper: float = Field(description="Upper 95% confidence bound for score")
-    hazard_ci_lower: float = Field(description="Lower 95% confidence bound for hazard")
-    hazard_ci_upper: float = Field(description="Upper 95% confidence bound for hazard")
-    traversability_ci_lower: float = Field(description="Lower 95% confidence bound for traversability")
-    traversability_ci_upper: float = Field(description="Upper 95% confidence bound for traversability")
-    bootstrap_samples: int = Field(description="Number of bootstrap samples used")
+    score_ci_lower: float = Field(description="2.5th percentile under assumed index perturbation for score")
+    score_ci_upper: float = Field(description="97.5th percentile under assumed index perturbation for score")
+    hazard_ci_lower: float = Field(description="2.5th percentile under assumed index perturbation for hazard")
+    hazard_ci_upper: float = Field(description="97.5th percentile under assumed index perturbation for hazard")
+    traversability_ci_lower: float = Field(description="2.5th percentile under assumed index perturbation for traversability")
+    traversability_ci_upper: float = Field(description="97.5th percentile under assumed index perturbation for traversability")
+    bootstrap_samples: int = Field(description="Legacy field: number of assumed-noise perturbation runs")
 
 class LandingZone(BaseModel):
     id: str

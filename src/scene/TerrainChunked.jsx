@@ -1,499 +1,224 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { analysisColor } from '../engine/terrain';
-import { getRegolithMaps } from './lunarSurface';
+import { MemoryTileSource, windowValue, TILE_CELLS } from '../engine/tileSource';
+import { terrainRenderBounds } from '../engine/terrainNavigation';
 
-// Regolith detail repeats once per this many world-metres.
-const DETAIL_TILE_M = 60;
+export { buildTerrainTile, createTerrainTiles, selectVisibleTiles } from './terrainGeometry';
+export const CHUNK_SIZE = TILE_CELLS;
+import { buildTerrainTile, selectVisibleTiles, selectStreamedTiles, buildTileBoundary, trimGeometryCache } from './terrainGeometry';
 
-const MIN_TILE_CELLS = 32;
-const TARGET_TILE_VERTS = 65;
-const REFINE_DISTANCE_FACTOR = 2.2;
-const MAX_VISIBLE_TILES = 160;
-const MAX_CACHED_GEOMETRIES = 384;
-const CAMERA_UPDATE_INTERVAL = 6;
-const CAMERA_MOVE_EPSILON = 4;
-const LOD_LEVELS = [
-  { level: 0, targetVerts: TARGET_TILE_VERTS },
-  { level: 1, targetVerts: TARGET_TILE_VERTS },
-  { level: 2, targetVerts: TARGET_TILE_VERTS },
-];
-
-function indexToWorld(index, size, scale) {
-  return (index / (size - 1) - 0.5) * scale;
+function colorTile(terrain,layers,viewMode,tile,imagery) {
+  const color=new THREE.Color(), attr=tile.geometry.attributes.color;
+  const samples=tile.geometry.userData.samples;
+  for(let k=0;k<attr.count;k++) {
+    const i=samples[k*2],j=samples[k*2+1];
+    const ni=Math.round(i),nj=Math.round(j), index=ni*terrain.size+nj;
+    const value=tile.window ? windowValue(tile.window,viewMode,ni,nj) : layers?.[viewMode]?.[index];
+    color.setRGB(...(imagery ? [1,1,1] : analysisColor(viewMode,value,terrain,tile.geometry.attributes.position.getY(k))),THREE.SRGBColorSpace);
+    attr.setXYZ(k,color.r,color.g,color.b);
+  }
+  attr.needsUpdate=true;
 }
 
-function makeRange(start, end, step) {
-  const result = [];
-  for (let value = start; value < end; value += step) {
-    result.push(value);
-  }
-  if (result[result.length - 1] !== end) {
-    result.push(end);
-  }
-  return result;
-}
-
-function getLayerValue(terrain, layers, viewMode, dataIndex, height) {
-  if (viewMode === 'elevation') {
-    return (height - terrain.minH) / (terrain.maxH - terrain.minH + 0.001);
-  }
-  return layers?.[viewMode]?.[dataIndex] ?? 0;
-}
-
-function terrainNormal(terrain, i, j) {
-  const { data, size, scale } = terrain;
-  const i0 = Math.max(0, i - 1);
-  const i1 = Math.min(size - 1, i + 1);
-  const j0 = Math.max(0, j - 1);
-  const j1 = Math.min(size - 1, j + 1);
-  const cell = scale / (size - 1);
-  const dx = Math.max(1, i1 - i0) * cell;
-  const dz = Math.max(1, j1 - j0) * cell;
-  const dhdx = (data[i1 * size + j] - data[i0 * size + j]) / dx;
-  const dhdz = (data[i * size + j1] - data[i * size + j0]) / dz;
-  const length = Math.sqrt(dhdx * dhdx + dhdz * dhdz + 1);
-  return [-dhdx / length, 1 / length, -dhdz / length];
-}
-
-function skirtNormal(edge) {
-  if (edge === 'west') return [-1, 0, 0];
-  if (edge === 'east') return [1, 0, 0];
-  if (edge === 'north') return [0, 0, -1];
-  return [0, 0, 1];
-}
-
-function addSkirtToGeometry({ positions, normals, uvs, indices, topIndices, edge, skirtDepth }) {
-  const skirtStart = positions.length / 3;
-  const [nx, ny, nz] = skirtNormal(edge);
-
-  for (const topIndex of topIndices) {
-    const p = topIndex * 3;
-    positions.push(positions[p], positions[p + 1] - skirtDepth, positions[p + 2]);
-    normals.push(nx, ny, nz);
-    // Skirts are hidden in fog/apron; reuse the top vertex UV.
-    uvs.push(uvs[topIndex * 2], uvs[topIndex * 2 + 1]);
-  }
-
-  for (let n = 0; n < topIndices.length - 1; n++) {
-    const t0 = topIndices[n];
-    const t1 = topIndices[n + 1];
-    const b0 = skirtStart + n;
-    const b1 = skirtStart + n + 1;
-
-    if (edge === 'west') {
-      indices.push(t0, b0, t1, t1, b0, b1);
-    } else if (edge === 'east') {
-      indices.push(t0, t1, b0, t1, b1, b0);
-    } else if (edge === 'north') {
-      indices.push(t0, t1, b0, t1, b1, b0);
-    } else {
-      indices.push(t0, b0, t1, t1, b0, b1);
-    }
-  }
-}
-
-function buildBaseGeometry(terrain, tile) {
-  const { data, size, scale, minH, maxH } = terrain;
-  const iRange = makeRange(tile.i0, tile.i1, tile.step);
-  const jRange = makeRange(tile.j0, tile.j1, tile.step);
-  const rows = iRange.length;
-  const cols = jRange.length;
-  const positions = [];
-  const normals = [];
-  const uvs = [];
-  const indices = [];
-
-  for (let i = 0; i < rows; i++) {
-    const dataI = iRange[i];
-    const wx = indexToWorld(dataI, size, scale);
-    for (let j = 0; j < cols; j++) {
-      const dataJ = jRange[j];
-      const wz = indexToWorld(dataJ, size, scale);
-      const dataIndex = dataI * size + dataJ;
-      const height = data[dataIndex];
-      const [nx, ny, nz] = terrainNormal(terrain, dataI, dataJ);
-      positions.push(wx, height, wz);
-      normals.push(nx, ny, nz);
-      // Planar world-space UV so the regolith detail map tiles seamlessly
-      // across tile boundaries regardless of LOD.
-      uvs.push(wx / DETAIL_TILE_M, wz / DETAIL_TILE_M);
-    }
-  }
-
-  for (let i = 0; i < rows - 1; i++) {
-    for (let j = 0; j < cols - 1; j++) {
-      const a = i * cols + j;
-      const b = (i + 1) * cols + j;
-      const c = i * cols + j + 1;
-      const d = (i + 1) * cols + j + 1;
-      indices.push(a, c, b, b, c, d);
-    }
-  }
-
-  const skirtDepth = Math.max(1.5, (maxH - minH) * 0.08);
-  const west = [];
-  const east = [];
-  for (let j = 0; j < cols; j++) {
-    west.push(j);
-    east.push((rows - 1) * cols + j);
-  }
-  const north = [];
-  const south = [];
-  for (let i = 0; i < rows; i++) {
-    north.push(i * cols);
-    south.push(i * cols + cols - 1);
-  }
-
-  if (tile.skirts?.west) {
-    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: west, edge: 'west', skirtDepth });
-  }
-  if (tile.skirts?.east) {
-    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: east, edge: 'east', skirtDepth });
-  }
-  if (tile.skirts?.north) {
-    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: north, edge: 'north', skirtDepth });
-  }
-  if (tile.skirts?.south) {
-    addSkirtToGeometry({ positions, normals, uvs, indices, topIndices: south, edge: 'south', skirtDepth });
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeBoundingSphere();
-  geometry.computeBoundingBox();
-  geometry.userData = {
-    terrainTile: tile.key,
-    step: tile.step,
-    cells: Math.max(tile.i1 - tile.i0, tile.j1 - tile.j0),
-  };
-  return geometry;
-}
-
-function buildTileColorAttribute(terrain, layers, viewMode, tile) {
-  const { data, size } = terrain;
-  const iRange = makeRange(tile.i0, tile.i1, tile.step);
-  const jRange = makeRange(tile.j0, tile.j1, tile.step);
-  const rows = iRange.length;
-  const cols = jRange.length;
-  const colors = [];
-
-  for (let i = 0; i < rows; i++) {
-    const dataI = iRange[i];
-    for (let j = 0; j < cols; j++) {
-      const dataJ = jRange[j];
-      const dataIndex = dataI * size + dataJ;
-      const height = data[dataIndex];
-      const layerValue = getLayerValue(terrain, layers, viewMode, dataIndex, height);
-      const [r, g, b] = analysisColor(viewMode, layerValue, terrain, height);
-      colors.push(r, g, b);
-    }
-  }
-
-  if (tile.skirts?.west) {
-    for (let j = 0; j < cols; j++) {
-      const idx = j * 3;
-      colors.push(colors[idx], colors[idx + 1], colors[idx + 2]);
-    }
-  }
-  if (tile.skirts?.east) {
-    for (let j = 0; j < cols; j++) {
-      const idx = ((rows - 1) * cols + j) * 3;
-      colors.push(colors[idx], colors[idx + 1], colors[idx + 2]);
-    }
-  }
-  if (tile.skirts?.north) {
-    for (let i = 0; i < rows; i++) {
-      const idx = (i * cols) * 3;
-      colors.push(colors[idx], colors[idx + 1], colors[idx + 2]);
-    }
-  }
-  if (tile.skirts?.south) {
-    for (let i = 0; i < rows; i++) {
-      const idx = (i * cols + cols - 1) * 3;
-      colors.push(colors[idx], colors[idx + 1], colors[idx + 2]);
-    }
-  }
-
-  const attr = new THREE.BufferAttribute(new Float32Array(colors), 3);
-  return attr;
-}
-
-function makeTile(terrain, i0, i1, j0, j1, depth) {
-  const { size, scale, minH, maxH } = terrain;
-  const x0 = indexToWorld(i0, size, scale);
-  const x1 = indexToWorld(i1, size, scale);
-  const z0 = indexToWorld(j0, size, scale);
-  const z1 = indexToWorld(j1, size, scale);
-  const cells = Math.max(i1 - i0, j1 - j0);
-  const step = Math.max(1, Math.ceil(cells / (TARGET_TILE_VERTS - 1)));
-  const centerX = (x0 + x1) * 0.5;
-  const centerZ = (z0 + z1) * 0.5;
-  const centerY = (minH + maxH) * 0.5;
-  const radius = Math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2 + (maxH - minH) ** 2) * 0.5 + 4;
-
-  return {
-    key: `${i0}:${i1}:${j0}:${j1}:${step}:${depth}`,
-    i0, i1, j0, j1, step, depth, cells,
-    centerX, centerZ,
-    extent: Math.max(Math.abs(x1 - x0), Math.abs(z1 - z0)),
-    sphere: new THREE.Sphere(new THREE.Vector3(centerX, centerY, centerZ), radius),
-  };
-}
-
-function isCameraNearTile(tile, cameraPosition) {
-  const dx = tile.centerX - cameraPosition.x;
-  const dz = tile.centerZ - cameraPosition.z;
-  const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
-  const altitudeBias = Math.max(0, cameraPosition.y) * 0.35;
-  return horizontalDistance + altitudeBias < tile.extent * REFINE_DISTANCE_FACTOR;
-}
-
-function splitNode(tile) {
-  const iMid = Math.floor((tile.i0 + tile.i1) * 0.5);
-  const jMid = Math.floor((tile.j0 + tile.j1) * 0.5);
-  if (iMid <= tile.i0 || iMid >= tile.i1 || jMid <= tile.j0 || jMid >= tile.j1) {
-    return [];
-  }
-  return [
-    [tile.i0, iMid, tile.j0, jMid],
-    [iMid, tile.i1, tile.j0, jMid],
-    [tile.i0, iMid, jMid, tile.j1],
-    [iMid, tile.i1, jMid, tile.j1],
-  ];
-}
-
-function selectVisibleTiles(terrain, camera) {
-  const frustum = new THREE.Frustum();
-  const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  frustum.setFromProjectionMatrix(matrix);
-
-  const selected = [];
-  const visit = (i0, i1, j0, j1, depth) => {
-    if (selected.length >= MAX_VISIBLE_TILES) return;
-
-    const tile = makeTile(terrain, i0, i1, j0, j1, depth);
-    if (!frustum.intersectsSphere(tile.sphere)) return;
-
-    const canSplit = tile.cells > MIN_TILE_CELLS;
-    if (canSplit && isCameraNearTile(tile, camera.position)) {
-      const children = splitNode(tile);
-      if (children.length > 0) {
-        for (const child of children) {
-          visit(child[0], child[1], child[2], child[3], depth + 1);
-        }
-        return;
-      }
-    }
-
-    selected.push(tile);
-  };
-
-  visit(0, terrain.size - 1, 0, terrain.size - 1, 0);
-  selected.sort((a, b) => a.depth - b.depth || a.key.localeCompare(b.key));
-  return selected;
-}
-
-function disposeGeometryCache(cache) {
-  for (const geometry of cache.values()) {
-    geometry.dispose();
-  }
-  cache.clear();
-}
-
-function disposeColorCache(cache) {
-  cache.clear();
-}
-
-function trimCache(cache, visibleKeys) {
-  if (cache.size <= MAX_CACHED_GEOMETRIES) return;
-  for (const [key, value] of cache) {
-    if (cache.size <= MAX_CACHED_GEOMETRIES) return;
-    if (visibleKeys.has(key)) continue;
-    if (value.dispose) value.dispose();
-    cache.delete(key);
-  }
-}
-
-function overlaps(a0, a1, b0, b1) {
-  return a0 < b1 && b0 < a1;
-}
-
-function edgeNeighbors(tile, allTiles, edge) {
-  return allTiles.filter((candidate) => {
-    if (candidate === tile) return false;
-    if (edge === 'west') {
-      return candidate.i1 === tile.i0 && overlaps(candidate.j0, candidate.j1, tile.j0, tile.j1);
-    }
-    if (edge === 'east') {
-      return candidate.i0 === tile.i1 && overlaps(candidate.j0, candidate.j1, tile.j0, tile.j1);
-    }
-    if (edge === 'north') {
-      return candidate.j1 === tile.j0 && overlaps(candidate.i0, candidate.i1, tile.i0, tile.i1);
-    }
-    return candidate.j0 === tile.j1 && overlaps(candidate.i0, candidate.i1, tile.i0, tile.i1);
-  });
-}
-
-function edgeNeedsSkirt(tile, allTiles, edge) {
-  const neighbors = edgeNeighbors(tile, allTiles, edge);
-  if (neighbors.length === 0) return true;
-  return neighbors.some((neighbor) => neighbor.step !== tile.step);
-}
-
-function withSkirtFlags(tile, allTiles) {
-  const skirts = {
-    west: edgeNeedsSkirt(tile, allTiles, 'west'),
-    east: edgeNeedsSkirt(tile, allTiles, 'east'),
-    north: edgeNeedsSkirt(tile, allTiles, 'north'),
-    south: edgeNeedsSkirt(tile, allTiles, 'south'),
-  };
-  const skirtKey = `${skirts.west ? 'w' : '-'}${skirts.east ? 'e' : '-'}${skirts.north ? 'n' : '-'}${skirts.south ? 's' : '-'}`;
-  return { ...tile, skirts, skirtKey };
-}
-
-function TerrainTile({ geometry, material }) {
-  return (
-    <mesh geometry={geometry} material={material} receiveShadow frustumCulled />
-  );
-}
-
-export default React.memo(function TerrainChunked({ terrain, layers, viewMode }) {
-  const { camera } = useThree();
-  const geometryCacheRef = useRef(new Map());
-  const colorCacheRef = useRef(new Map());
-  const lastCameraPositionRef = useRef(new THREE.Vector3(Number.POSITIVE_INFINITY, 0, 0));
-  const frameRef = useRef(0);
-  const prevViewModeRef = useRef(null);
-  const [visibleTiles, setVisibleTiles] = useState(() => selectVisibleTiles(terrain, camera));
-
-  const material = useMemo(
-    () => {
-      const { normal, roughness } = getRegolithMaps();
-      return new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        roughnessMap: roughness,
-        roughness: 1.0,
-        metalness: 0.0,
-        normalMap: normal,
-        normalScale: new THREE.Vector2(0.7, 0.7),
-        flatShading: false,
-      });
-    },
-    [],
-  );
-
-  // Data-viz layers should read as clean color, not gritty rock; the
-  // regolith normal detail only belongs on the photoreal surface view.
-  useEffect(() => {
-    const photoreal = viewMode === 'elevation' || viewMode === 'surface';
-    material.normalScale.set(photoreal ? 0.7 : 0.18, photoreal ? 0.7 : 0.18);
-    material.needsUpdate = true;
-  }, [material, viewMode]);
-
-  const updateVisibleTiles = useCallback(
-    (force = false) => {
-      frameRef.current += 1;
-      if (!force && frameRef.current % CAMERA_UPDATE_INTERVAL !== 0) return;
-
-      const previous = lastCameraPositionRef.current;
-      const moved = previous.distanceTo(camera.position);
-      if (!force && moved < CAMERA_MOVE_EPSILON) return;
-
+export default React.memo(function TerrainChunked({ terrain,layers,viewMode,colorMap,onReady,onError,debugMode=false,onStats,benchmarkMode='tiled',verticalExaggeration=1,quality={dpr:1},environment={} }) {
+  const { camera,size,controls }=useThree();
+  const bounds=useMemo(()=>terrainRenderBounds(terrain,verticalExaggeration),[terrain,verticalExaggeration]);
+  const viewport=useRef();viewport.current={height:size.height*quality.dpr,controls,bounds};
+  const source=useMemo(()=>terrain.tileSource || new MemoryTileSource(terrain,layers),[terrain,layers]);
+  const remote=Boolean(terrain.stream), cache=useRef(new Map()), drawn=useRef(false);
+  const [tiles,setTiles]=useState([]),[desired,setDesired]=useState([]),[loading,setLoading]=useState(false);
+  const [fallback,setFallback]=useState(null);
+  const fineGroup=useRef(),fallbackGroup=useRef(),loadingRef=useRef(false);
+  loadingRef.current=loading;
+  const active=useRef([]),modeRef=useRef({viewMode,colorMap});modeRef.current={viewMode,colorMap};
+  const dispose=entry=> {entry.geometry.dispose();entry.boundary?.dispose();};
+  useEffect(()=> {
+    const ownedCache=new Map();cache.current=ownedCache;
+    let generation=0,signature='',closed=false;
+    const overviewKey=remote ? `${terrain.stream.max_level}/0/0` : null;
+    const trimOwned=()=>trimGeometryCache(ownedCache,new Set([...active.current.map(t=>t.cacheKey),...requiredNow,...(overviewKey ? [overviewKey] : [])]));
+    const abort=new AbortController();drawn.current=false;active.current=[];setTiles([]);setFallback(null);
+    if(import.meta.env.DEV)globalThis.__BHUVAN_STREAMING_STATS__={};
+    const update=()=> {
+      if(closed)return;
       camera.updateMatrixWorld();
-      camera.updateProjectionMatrix();
-      const nextTiles = selectVisibleTiles(terrain, camera);
-      const signature = nextTiles.map((tile) => tile.key).join('|');
-
-      setVisibleTiles((current) => {
-        const currentSignature = current.map((tile) => tile.key).join('|');
-        return currentSignature === signature ? current : nextTiles;
-      });
-      previous.copy(camera.position);
-    },
-    [camera, terrain],
-  );
-
-  useEffect(() => {
-    disposeGeometryCache(geometryCacheRef.current);
-    disposeColorCache(colorCacheRef.current);
-    lastCameraPositionRef.current.set(Number.POSITIVE_INFINITY, 0, 0);
-    updateVisibleTiles(true);
-  }, [layers, terrain, updateVisibleTiles]);
-
-  useEffect(() => {
-    return () => {
-      disposeGeometryCache(geometryCacheRef.current);
-      disposeColorCache(colorCacheRef.current);
-    };
-  }, []);
-
-  useFrame(() => {
-    updateVisibleTiles(false);
-  });
-
-  const renderedTiles = useMemo(() => {
-    if (prevViewModeRef.current !== null && prevViewModeRef.current !== viewMode) {
-      const prefix = `${prevViewModeRef.current}:`;
-      const colCache = colorCacheRef.current;
-      for (const key of colCache.keys()) {
-        if (key.startsWith(prefix)) {
-          colCache.delete(key);
+      let next=remote ? selectStreamedTiles(viewport.current.bounds,camera,viewport.current.height,viewport.current.controls?.target)
+        : selectVisibleTiles(viewport.current.bounds,camera,viewport.current.height);
+      if(!remote && import.meta.env.DEV && benchmarkMode==='monolithic' && terrain.size<=1025 && next.length) {
+        const step=next[0].step;
+        next=[{i0:0,j0:0,i1:terrain.size-1,j1:terrain.size-1,key:'monolithic',step,cacheKey:`monolithic:${step}`}];
+      }
+      if(!next.length) {
+        // Retain the last valid surface. An empty frustum selection is explicit,
+        // never a reason to erase the scene or change authoritative data.
+        onError?.('No terrain tiles intersect the camera. Recenter the dataset.');return;
+      }
+      const sig=next.map(t=>t.cacheKey).join('|');if(sig===signature)return;
+      signature=sig;const current=++generation;setLoading(true);setDesired(next);
+      const required=new Set([...next.map(t=>t.cacheKey),...(overviewKey ? [overviewKey] : [])]);source.cancelExcept?.(required);
+      Promise.all(next.map(async tile=> {
+        let entry=ownedCache.get(tile.cacheKey);
+        if(!entry) {
+          const window=await source.readTile(tile,{signal:abort.signal});
+          if(closed || (current!==generation && !requiredNow.has(tile.cacheKey)))return null;
+          entry=ownedCache.get(tile.cacheKey);
+          if(!entry) {
+            entry={...tile,window,geometry:buildTerrainTile(terrain,tile,window)};
+            if(remote)entry.boundary=buildTileBoundary(terrain,entry,window);
+            ownedCache.set(tile.cacheKey,entry);
+            trimOwned();
+          }
+        } else {ownedCache.delete(tile.cacheKey);ownedCache.set(tile.cacheKey,entry);}
+        colorTile(terrain,layers,modeRef.current.viewMode,entry,modeRef.current.viewMode==='surface' && modeRef.current.colorMap);
+        return entry;
+      })).then(loaded=> {
+        if(closed || current!==generation || loaded.some(value=>!value))return;
+        // Replace only complete, consistently sampled sets. This is also the
+        // guarantee against mixed display LOD boundaries during transitions.
+        active.current=loaded;setTiles(loaded);onError?.('');
+      }).catch(error=> {
+        if(!closed && current===generation && error.name!=='AbortError') {
+          console.error('[terrain] Tile load failed',error);onError?.(`Terrain tile load failed: ${error.message}`);
         }
-      }
+      }).finally(()=> {if(!closed && current===generation)setLoading(false);});
+      requiredNow=required;
+    };
+    let requiredNow=new Set();
+    if(remote) {
+      const level=terrain.stream.max_level,step=2**level,key=`${level}/0/0`;
+      const root={i0:0,j0:0,i1:terrain.size-1,j1:terrain.size-1,step,level,x:0,y:0,key,cacheKey:key};
+      source.getTile(level,0,0,{signal:abort.signal}).then(window=> {
+        if(closed)return;
+        let entry=ownedCache.get(key);
+        if(!entry) {
+          entry={...root,window,geometry:buildTerrainTile(terrain,root,window)};
+          entry.boundary=buildTileBoundary(terrain,entry,window);ownedCache.set(key,entry);
+          trimOwned();
+        }
+        colorTile(terrain,layers,modeRef.current.viewMode,entry,modeRef.current.viewMode==='surface' && modeRef.current.colorMap);
+        setFallback(entry);
+      }).catch(error=> {if(!closed && error.name!=='AbortError')onError?.(`Dataset overview unavailable: ${error.message}`);});
     }
-    prevViewModeRef.current = viewMode;
-
-    const geoCache = geometryCacheRef.current;
-    const colCache = colorCacheRef.current;
-    const geoVisibleKeys = new Set();
-    const colVisibleKeys = new Set();
-    const tilesWithSkirts = visibleTiles.map((tile) => withSkirtFlags(tile, visibleTiles));
-
-    const tiles = tilesWithSkirts.map((tile) => {
-      const baseKey = `${tile.key}:${tile.skirtKey}`;
-      const colorKey = `${viewMode}:${baseKey}`;
-      geoVisibleKeys.add(baseKey);
-      colVisibleKeys.add(colorKey);
-
-      let geometry = geoCache.get(baseKey);
-      if (!geometry) {
-        geometry = buildBaseGeometry(terrain, tile);
-        geoCache.set(baseKey, geometry);
-      }
-
-      let colorAttr = colCache.get(colorKey);
-      if (!colorAttr) {
-        colorAttr = buildTileColorAttribute(terrain, layers, viewMode, tile);
-        colCache.set(colorKey, colorAttr);
-      }
-
-      if (geometry.attributes.color !== colorAttr) {
-        geometry.setAttribute('color', colorAttr);
-        geometry.attributes.color.needsUpdate = true;
-        geometry.attributes.position.needsUpdate = false;
-        geometry.attributes.normal.needsUpdate = false;
-      }
-
-      return { key: colorKey, geometry };
-    });
-
-    trimCache(geoCache, geoVisibleKeys);
-    trimCache(colCache, colVisibleKeys);
-    return tiles;
-  }, [layers, terrain, viewMode, visibleTiles]);
-
-  return (
-    <group dispose={null} userData={{ terrainTiles: renderedTiles.length }}>
-      {renderedTiles.map((tile) => (
-        <TerrainTile key={tile.key} geometry={tile.geometry} material={material} />
-      ))}
+    update();const timer=setInterval(update,200);
+    return()=> {closed=true;abort.abort();clearInterval(timer);source.dispose?.();for(const entry of ownedCache.values())dispose(entry);ownedCache.clear();};
+  },[camera,terrain,source,onError,benchmarkMode,remote]);
+  useEffect(()=> {
+    for(const tile of tiles)colorTile(terrain,layers,viewMode,tile,viewMode==='surface' && colorMap);
+    if(fallback)colorTile(terrain,layers,viewMode,fallback,viewMode==='surface' && colorMap);
+  },[tiles,fallback,terrain,layers,viewMode,colorMap]);
+  useEffect(()=> {
+    const visible=new Set(tiles.map(t=>t.cacheKey));
+    // A tile returned by an unfinished Promise.all must not be evicted before
+    // commit: rendering a disposed orphan would re-upload geometry that is no
+    // longer owned by the cache. Retain both drawn and pending complete sets.
+    const retained=new Set([...visible,...desired.map(t=>t.cacheKey),...(remote ? [`${terrain.stream.max_level}/0/0`] : [])]);
+    trimGeometryCache(cache.current,retained);
+    const displayed=loading && fallback ? [fallback] : tiles;
+    const statistics={renderingMode:remote ? 'remote tiles' : benchmarkMode,loadedTiles:tiles.length,cachedGeometryTiles:cache.current.size,
+      logicalDimensions:[terrain.size,terrain.size],activeTiles:displayed.length,activeVertices:displayed.reduce((n,t)=>n+t.geometry.attributes.position.count,0),
+      triangles:displayed.reduce((n,t)=>n+t.geometry.index.count/3,0),lod:displayed[0]?.geometry.userData.lod ?? null,
+      tileReads:source.metrics.reads,tileLoadMs:source.metrics.totalLoadMs,tileWindowBytes:source.metrics.bytes,
+      visualGsd:terrain.scale/(terrain.size-1)*(loading && fallback ? fallback.step : tiles[0]?.step||1),analysisGsd:remote ? terrain.stream.analysis?.gsd_m ?? null : terrain.scale/(terrain.size-1),
+      fullRasterResidentBytes:remote ? 0 : (terrain.data?.byteLength||0)+(terrain.scientificData?.byteLength||0)+Object.values(layers||{}).reduce((n,f)=>n+(f?.byteLength||0),0),
+      loading,sourceLimitation:source.limitation,...source.statistics};
+    onStats?.(statistics);
+    const windows=new Set([...Array.from(cache.current.values(),t=>t.window),...Array.from(source.cache?.values?.() || [])]);
+    if(import.meta.env.DEV)globalThis.__BHUVAN_STREAMING_STATS__={...globalThis.__BHUVAN_STREAMING_STATS__,...statistics,
+      tileStates:desired.map(t=>({id:t.key,lod:t.level ?? Math.log2(t.step),state:visible.has(t.cacheKey) ? 'resident' : source.errors?.has(t.key) ? 'error' : source.inFlight?.has(t.key) ? 'loading' : source.cache?.has(t.key) ? 'cached' : 'unloaded'})),
+      geometryBufferBytes:Array.from(cache.current.values()).reduce((sum,t)=>sum+Object.values(t.geometry.attributes).reduce((n,a)=>n+a.array.byteLength,0)+t.geometry.index.array.byteLength,0),
+      ownedTerrainGeometries:Array.from(cache.current.values()).reduce((sum,t)=>sum+1+(t.boundary ? 1 : 0),0),
+      residentCpuTileBytes:Array.from(windows).reduce((sum,w)=>sum+(w.byteLength || Object.values(w.fields).reduce((n,f)=>n+f.byteLength,0)),0),
+      serverRssBytes:displayed[0]?.window.server_rss_bytes ?? null};
+  },[tiles,desired,fallback,layers,viewMode,colorMap,loading,onStats,source,terrain,benchmarkMode]);
+  useFrame(()=> {
+    if(!remote || !fineGroup.current || !fallbackGroup.current)return;
+    const target=viewport.current.controls?.target;
+    const i=target ? (target.x/terrain.scale+.5)*(terrain.size-1) : terrain.size/2;
+    const j=target ? (target.z/terrain.scale+.5)*(terrain.size-1) : terrain.size/2;
+    const covered=active.current.some(t=>i>=t.i0 && i<=t.i1 && j>=t.j0 && j<=t.j1);
+    const useOverview=Boolean(fallback) && (loadingRef.current || !covered || !active.current.length);
+    fallbackGroup.current.visible=useOverview;fineGroup.current.visible=!useOverview;
+    if(import.meta.env.DEV && globalThis.__BHUVAN_STREAMING_STATS__) {
+      globalThis.__BHUVAN_STREAMING_STATS__.fallbackActive=useOverview;
+      globalThis.__BHUVAN_STREAMING_STATS__.effectiveDisplayGsd=terrain.scale/(terrain.size-1)*(useOverview ? fallback.step : active.current[0]?.step||1);
+      const displayed=useOverview ? [fallback] : active.current;
+      globalThis.__BHUVAN_STREAMING_STATS__.activeTiles=displayed.length;
+      globalThis.__BHUVAN_STREAMING_STATS__.activeVertices=displayed.reduce((n,t)=>n+t.geometry.attributes.position.count,0);
+      globalThis.__BHUVAN_STREAMING_STATS__.triangles=displayed.reduce((n,t)=>n+t.geometry.index.count/3,0);
+    }
+  });
+  const physical=viewMode==='surface',imagery=physical ? colorMap : null;
+  const material=useMemo(()=> {
+    if (!physical) return new THREE.MeshBasicMaterial({ vertexColors:true,toneMapped:false });
+    const m = new THREE.MeshStandardMaterial({ vertexColors:true,map:imagery,roughness:.92,metalness:0 });
+    {
+      // Subtle world-space material grain. Continuous across tile borders and
+      // distance-filtered; presentation only, no displacement or new DEM detail.
+      m.onBeforeCompile = shader => {
+        shader.vertexShader = shader.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 grainPosition;')
+          .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\ngrainPosition = (modelMatrix * vec4(transformed, 1.0)).xyz; grainPosition.y=transformed.y;');
+        shader.fragmentShader = shader.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 grainPosition;')
+          .replace('#include <color_fragment>', `#include <color_fragment>
+            ${!imagery ? `vec3 g = grainPosition * ${Math.max(.02, 20 / terrain.scale).toFixed(8)};
+            vec3 weights = abs(normalize(vNormal)); weights /= max(dot(weights, vec3(1.0)), .001);
+            float detail = dot(vec3(sin(g.y*7.1)*sin(g.z*9.3),sin(g.x*7.1)*sin(g.z*9.3),sin(g.x*7.1)*sin(g.y*9.3)), weights);
+            float fade = 1.0 / (1.0 + length(fwidth(g)) * 12.0);
+            diffuseColor.rgb *= 1.0 + detail * .14 * fade;` : ''}
+            ${environment.snow && terrain.body==='earth' ? `float snow=smoothstep(${((environment.snowLine||0)-(terrain.elevationOrigin||0)).toFixed(3)},${((environment.snowLine||0)-(terrain.elevationOrigin||0)+Math.max(1,terrain.scale*.002)).toFixed(3)},grainPosition.y)*smoothstep(.35,.8,abs(normalize(vNormal).y));diffuseColor.rgb=mix(diffuseColor.rgb,vec3(.82,.9,.95),snow);` : ''}`);
+      };
+      const baseCompile=m.onBeforeCompile;
+      m.onBeforeCompile=shader=> {
+        baseCompile(shader);
+        if(environment.microtexture===false)return;
+        shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
+          float regolithHash(vec3 p){return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453);}
+          float regolithNoise(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);
+            return mix(mix(mix(regolithHash(i),regolithHash(i+vec3(1,0,0)),f.x),mix(regolithHash(i+vec3(0,1,0)),regolithHash(i+vec3(1,1,0)),f.x),f.y),mix(mix(regolithHash(i+vec3(0,0,1)),regolithHash(i+vec3(1,0,1)),f.x),mix(regolithHash(i+vec3(0,1,1)),regolithHash(i+vec3(1,1,1)),f.x),f.y),f.z);}
+        `).replace('#include <normal_fragment_maps>',`#include <normal_fragment_maps>
+          vec3 finePosition=grainPosition*20.0;
+          float footprint=length(fwidth(finePosition));
+          float grain=regolithNoise(finePosition)*0.004/(1.0+footprint*footprint);
+          vec3 sx=dFdx(-vViewPosition),sy=dFdy(-vViewPosition);
+          vec3 rx=cross(sy,normal),ry=cross(normal,sx);
+          float determinant=dot(sx,rx)*faceDirection;
+          normal=normalize(max(abs(determinant),1e-8)*normal-sign(determinant)*(dFdx(grain)*rx+dFdy(grain)*ry));
+        `);
+      };
+      m.customProgramCacheKey = () => `terrain-grain-${environment.microtexture}-${Boolean(imagery)}-${terrain.scale}-${environment.snow}-${environment.snowLine}`;
+    }
+    return m;
+  },[environment.microtexture,physical,imagery,terrain.scale,terrain.body,terrain.elevationOrigin,environment.snow,environment.snowLine]);
+  const boundaryMaterial=useMemo(()=>new THREE.MeshBasicMaterial({color:'#363e48',side:THREE.DoubleSide,toneMapped:false}),[]);
+  const wireMaterial=useMemo(()=>new THREE.MeshBasicMaterial({wireframe:true,color:'#72dbeb',transparent:true,opacity:.2,toneMapped:false}),[]);
+  useEffect(()=>()=>material.dispose(),[material]);
+  useEffect(()=>()=> {boundaryMaterial.dispose();wireMaterial.dispose();},[boundaryMaterial,wireMaterial]);
+  const handleDraw=()=> { if(!drawn.current) { drawn.current=true;
+    if(import.meta.env.DEV && globalThis.__BHUVAN_STREAMING_STATS__)globalThis.__BHUVAN_STREAMING_STATS__.firstDrawMs=performance.now();
+    console.info('[terrain] First working set drawn',{ tiles:tiles.length });onReady?.(); } };
+  return <group dispose={null} name="DEM" userData={{ terrainTiles:tiles.length, cachedTiles:cache.current.size, source:remote ? 'remote' : 'memory' }}>
+    <group ref={fallbackGroup} name="Dataset loading overview" visible={false}>
+      {fallback && <group position={[fallback.geometry.userData.centerX,0,fallback.geometry.userData.centerZ]}>
+        <mesh geometry={fallback.geometry} material={material} receiveShadow={physical} castShadow={physical} onAfterRender={handleDraw} />
+        {fallback.boundary && <mesh geometry={fallback.boundary} material={boundaryMaterial} />}
+      </group>}
     </group>
-  );
+    <group ref={fineGroup} name="Detailed working set">
+    {import.meta.env.DEV && debugMode && desired.filter(t=>!tiles.some(v=>v.cacheKey===t.cacheKey)).map(t=><Html key={`pending-${t.key}`}
+      position={[((t.i0+t.i1)/2/(terrain.size-1)-.5)*terrain.scale,terrain.maxH,((t.j0+t.j1)/2/(terrain.size-1)-.5)*terrain.scale]}
+      center style={{pointerEvents:'none',fontSize:10,color:'#f4c16a',whiteSpace:'nowrap'}}>{t.key} · {source.errors?.has(t.key) ? 'ERROR' : 'LOADING'}</Html>)}
+    {tiles.map(tile=><group key={tile.cacheKey} position={[tile.geometry.userData.centerX,0,tile.geometry.userData.centerZ]}>
+      <mesh geometry={tile.geometry} material={material} receiveShadow={physical} castShadow={physical} onAfterRender={handleDraw} />
+      {tile.boundary && <mesh geometry={tile.boundary} material={boundaryMaterial} />}
+      {import.meta.env.DEV && debugMode && <>
+        <mesh geometry={tile.geometry} material={wireMaterial} position={[0,terrain.scale*.0002,0]} />
+        <Html position={[0,terrain.maxH,0]} center style={{ pointerEvents:'none',fontSize:10,whiteSpace:'nowrap',color:'#b3eaff' }}>
+          {tile.key} · LOD {tile.geometry.userData.lod} · RESIDENT
+        </Html>
+      </>}
+    </group>)}
+    </group>
+  </group>;
 });
-
-export { MIN_TILE_CELLS as CHUNK_SIZE, LOD_LEVELS, selectVisibleTiles };
